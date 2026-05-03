@@ -63,12 +63,12 @@ export class RecordStore {
 
   async doneTaskIds(): Promise<Set<string>> {
     const records = await readJsonl<TaskStatusRecord>(this.statusJsonl);
-    return new Set(records.filter((record) => TERMINAL_STATUSES.has(record.status)).map((record) => record.taskId));
+    return new Set([...latestRecordByTask(records).values()].filter((record) => TERMINAL_STATUSES.has(record.status)).map((record) => record.taskId));
   }
 
   async dailyPages(runDate = todayIso()): Promise<number> {
     const records = await readJsonl<TaskStatusRecord>(this.statusJsonl);
-    return records
+    return [...latestRecordByTask(records).values()]
       .filter((record) => record.runDate === runDate)
       .filter((record) => record.status === "downloaded")
       .reduce((sum, record) => sum + Math.max(0, record.pages || 0), 0);
@@ -148,4 +148,12 @@ export class RecordStore {
       throw error;
     }
   }
+}
+
+function latestRecordByTask(records: TaskStatusRecord[]): Map<string, TaskStatusRecord> {
+  const latest = new Map<string, TaskStatusRecord>();
+  for (const record of records) {
+    latest.set(record.taskId, record);
+  }
+  return latest;
 }

@@ -36,6 +36,33 @@ describe("record store", () => {
     expect(await store.doneTaskIds()).toEqual(new Set(["T0001"]));
     expect(await readFile(path.join(tmpDir, "progress.csv"), "utf8")).toContain("T0001");
   });
+
+  it("uses the latest task status when deciding completed tasks and daily pages", async () => {
+    const store = new RecordStore(
+      path.join(tmpDir, "mapping.csv"),
+      path.join(tmpDir, "status.jsonl"),
+      path.join(tmpDir, "progress.csv"),
+      500
+    );
+    await store.initialize();
+    await store.writeStatus({
+      task: taskFixture,
+      status: "downloaded",
+      pages: 12,
+      note: "partial download",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+    await store.writeStatus({
+      task: taskFixture,
+      status: "task_failed",
+      pages: 0,
+      note: "manual rerun requested",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+
+    expect(await store.doneTaskIds()).toEqual(new Set());
+    expect(await store.dailyPages()).toBe(0);
+  });
 });
 
 const taskFixture: RequestTask = {
