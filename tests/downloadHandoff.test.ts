@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { isBatchSavePrintAppUrl, isPdfLandingHandoff, shouldWaitBeforeReconnect } from "../src/browser/download.js";
+import {
+  expectedNativePdfCount,
+  isActiveDownloadTempFileName,
+  isBatchSavePrintAppUrl,
+  isPdfLandingHandoff,
+  nativePdfWaitTimeoutMs,
+  shouldWaitBeforeReconnect
+} from "../src/browser/download.js";
 
 describe("download handoff timing", () => {
   it("waits before reconnecting after BatchSavePrint CDP detach handoff", () => {
@@ -18,5 +25,20 @@ describe("download handoff timing", () => {
     expect(isBatchSavePrintAppUrl("https://workspace.refinitiv.com/web/Apps/BatchSavePrint/?ws=true")).toBe(true);
     expect(isBatchSavePrintAppUrl("https://workspace.refinitiv.com/Apps/BatchSavePrint/1.3.4/")).toBe(true);
     expect(isBatchSavePrintAppUrl("https://workspace.refinitiv.com/Apps/BatchSavePrintService/")).toBe(false);
+  });
+
+  it("waits longer for native downloads when multiple selected PDFs are expected", () => {
+    expect(nativePdfWaitTimeoutMs(1)).toBe(150_000);
+    expect(nativePdfWaitTimeoutMs(6)).toBe(540_000);
+  });
+
+  it("uses selected row count as the expected native PDF count", () => {
+    expect(expectedNativePdfCount(undefined)).toBe(1);
+    expect(expectedNativePdfCount({ selected: 6, requested: 6 } as never)).toBe(6);
+  });
+
+  it("detects active browser download temp files", () => {
+    expect(isActiveDownloadTempFileName("report.pdf.crdownload")).toBe(true);
+    expect(isActiveDownloadTempFileName("report.pdf")).toBe(false);
   });
 });

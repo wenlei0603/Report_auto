@@ -30,9 +30,10 @@ describe("result row review", () => {
     expect(review.eligible).toBe(true);
     expect(review.needsHumanReview).toBe(false);
     expect(review.autoSelect).toBe(true);
+    expect(review.downloadCategory).toBe("ticker_matched");
   });
 
-  it("flags broad basket rows for human review instead of auto-selecting", () => {
+  it("classifies broad basket rows as ticker-mismatch downloads when company and dates pass", () => {
     const review = evaluateResultRow(
       {
         rowIndex: 0,
@@ -59,10 +60,45 @@ describe("result row review", () => {
 
     expect(review.eligible).toBe(true);
     expect(review.needsHumanReview).toBe(true);
-    expect(review.autoSelect).toBe(false);
+    expect(review.autoSelect).toBe(true);
+    expect(review.downloadCategory).toBe("ticker_mismatch");
     expect(review.reasons).toContain("multi_company_row");
     expect(review.reasons).toContain("ambiguous_ticker");
     expect(review.reasons).toContain("title_not_company_specific");
+  });
+
+  it("auto-selects multi-link rows when the visible ticker and title still identify the target company", () => {
+    const review = evaluateResultRow(
+      {
+        rowIndex: 1,
+        dateText: "23-Apr-2015",
+        availableText: "30-Apr-2015, 11:02",
+        companyName: "Abbott Laboratories",
+        companyExtraCount: 4,
+        tickerText: "ABT.N",
+        tickerExtraCount: 4,
+        titleText: "Abbott Laboratories: Patience Is a Virtue",
+        pagesText: "12",
+        contributorText: "Morgan Stanley"
+      },
+      {
+        company: "Abbott Laboratories",
+        ticker: "ABT",
+        ccDate: "2015-04-22",
+        dateFrom: "2015-04-22",
+        dateTo: "2015-05-06",
+        contributor: "Morgan Stanley",
+        maxPages: 23
+      }
+    );
+
+    expect(review.eligible).toBe(true);
+    expect(review.needsHumanReview).toBe(true);
+    expect(review.autoSelect).toBe(true);
+    expect(review.downloadCategory).toBe("ticker_mismatch");
+    expect(review.reasons).toContain("multi_company_row");
+    expect(review.reasons).toContain("ambiguous_ticker");
+    expect(review.reasons).not.toContain("title_not_company_specific");
   });
 
   it("rejects rows outside the allowed contributor or page rules", () => {
@@ -92,6 +128,7 @@ describe("result row review", () => {
 
     expect(review.eligible).toBe(false);
     expect(review.autoSelect).toBe(false);
+    expect(review.downloadCategory).toBe("none");
     expect(review.reasons).toContain("date_out_of_range");
     expect(review.reasons).toContain("contributor_mismatch");
     expect(review.reasons).toContain("pages_exceed_limit");
@@ -124,6 +161,7 @@ describe("result row review", () => {
 
     expect(review.eligible).toBe(false);
     expect(review.autoSelect).toBe(false);
+    expect(review.downloadCategory).toBe("none");
     expect(review.reasons).toContain("date_out_of_event_window");
     expect(review.reasons).not.toContain("available_out_of_event_window");
   });
@@ -155,10 +193,11 @@ describe("result row review", () => {
 
     expect(review.eligible).toBe(false);
     expect(review.autoSelect).toBe(false);
+    expect(review.downloadCategory).toBe("none");
     expect(review.reasons).toContain("available_out_of_range");
   });
 
-  it("rejects rows for unrelated company or concrete ticker mismatch", () => {
+  it("rejects rows for unrelated company", () => {
     const review = evaluateResultRow(
       {
         rowIndex: 5,
@@ -186,6 +225,7 @@ describe("result row review", () => {
     expect(review.eligible).toBe(false);
     expect(review.reasons).toContain("company_mismatch");
     expect(review.reasons).toContain("ticker_mismatch");
+    expect(review.downloadCategory).toBe("none");
   });
 
   it("summarizes auto-selectable row indexes and human-review rows separately", () => {
@@ -227,8 +267,53 @@ describe("result row review", () => {
       }
     );
 
-    expect(summary.autoSelectRowIndexes).toEqual([2]);
+    expect(summary.autoSelectRowIndexes).toEqual([0, 2]);
+    expect(summary.tickerMatchedRowIndexes).toEqual([2]);
+    expect(summary.tickerMismatchRowIndexes).toEqual([0]);
     expect(summary.humanReviewRowIndexes).toEqual([0]);
     expect(summary.rejectedRowIndexes).toEqual([]);
+  });
+
+  it("prioritizes ticker-mismatch category for T0065-style rows while retaining strict rows separately", () => {
+    const summary = reviewResultRows(
+      [
+        {
+          rowIndex: 0,
+          dateText: "24-Apr-2015",
+          availableText: "01-May-2015, 12:22",
+          companyName: "Abbott Laboratories",
+          companyExtraCount: 5,
+          tickerText: "BCR.N^L17",
+          tickerExtraCount: 5,
+          titleText: "C.R. Bard: Lutonix & the Balance Sheet to Drive 2015",
+          pagesText: "14",
+          contributorText: "Morgan Stanley"
+        },
+        {
+          rowIndex: 5,
+          dateText: "22-Apr-2015",
+          availableText: "29-Apr-2015, 12:22",
+          companyName: "Abbott Laboratories",
+          companyExtraCount: 0,
+          tickerText: "ABT.N",
+          tickerExtraCount: 0,
+          titleText: "Abbott Laboratories: Strong Quarter as Growth and Margins Deliver",
+          pagesText: "8",
+          contributorText: "Morgan Stanley"
+        }
+      ],
+      {
+        company: "Abbott Laboratories",
+        ticker: "ABT",
+        ccDate: "2015-04-22",
+        dateFrom: "2015-04-22",
+        dateTo: "2015-05-06",
+        contributor: "Morgan Stanley",
+        maxPages: 23
+      }
+    );
+
+    expect(summary.tickerMismatchRowIndexes).toEqual([0]);
+    expect(summary.tickerMatchedRowIndexes).toEqual([5]);
   });
 });

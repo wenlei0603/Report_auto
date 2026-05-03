@@ -9,6 +9,7 @@ import { sanitizeFilename } from "../utils/filename.js";
 import { sha256File } from "../utils/hash.js";
 import { clickFirst } from "./locators.js";
 import { extractVisibleResultRows, reviewResultRows, selectResultRowsByIndex } from "./results.js";
+import type { ResultRowsReview } from "./results.js";
 import type { AutomationScope } from "./types.js";
 
 export interface BulkDownloadResult {
@@ -18,12 +19,49 @@ export interface BulkDownloadResult {
   artifacts: DownloadArtifact[];
   mappingRecords: MappingRecord[];
   error: string;
+  rowSelection?: DownloadRowSelection | undefined;
 }
 
 interface RowSelectionResult {
   ok: boolean;
   status: "no_downloadable_report" | "special_company_case";
   error: string;
+  rowSelection?: DownloadRowSelection | undefined;
+}
+
+interface PdfLandingBaseline {
+  capturedAtMs: number;
+  pdfMtimes: Map<string, number>;
+}
+
+interface PdfLandingResult {
+  complete: boolean;
+  paths: string[];
+  expected: number;
+  activeDownloads: number;
+}
+
+export interface DownloadRowSelection {
+  inspectableRows: number;
+  requested: number;
+  selected: number;
+  tickerMatched: number;
+  tickerMismatch: number;
+  selectedRows: DownloadRowSelectionItem[];
+  rejectedRows: DownloadRowSelectionItem[];
+}
+
+export interface DownloadRowSelectionItem {
+  rowIndex: number;
+  category: "ticker_matched" | "ticker_mismatch" | "none";
+  date: string;
+  available: string;
+  company: string;
+  ticker: string;
+  title: string;
+  pages: string;
+  contributor: string;
+  reasons: string[];
 }
 
 export async function executeBulkDownload(input: {
@@ -38,7 +76,7 @@ export async function executeBulkDownload(input: {
 
   const selected = await ensureEligibleRowsSelected(scope, config, page, task);
   if (!selected.ok) {
-    return failed(selected.status, selected.error);
+    return failed(selected.status, selected.error, selected.rowSelection);
   }
   await page.waitForTimeout(250);
 
@@ -56,7 +94,7 @@ export async function executeBulkDownload(input: {
 
     const pdfBaseline = await snapshotPdfCandidates(config, task.taskId);
     const clickedSave = await waitAndClickSave(scope, config, page);
-    const detachedResult = await detachOnBatchSavePrint(page, config, task, estimatedPages, pdfBaseline);
+    const detachedResult = await detachOnBatchSavePrint(page, config, task, estimatedPages, pdfBaseline, selected.rowSelection);
     if (detachedResult) {
       return detachedResult;
     }
@@ -95,7 +133,7 @@ export async function executeBulkDownload(input: {
       company: task.company,
       dateFrom: task.dateFrom,
       dateTo: task.dateTo,
-      reportTitle: "(bulk_selected_results)",
+      reportTitle: bulkReportTitle(selected.rowSelection),
       reportDate: "",
       pages,
       filePath: targetPath,
@@ -110,10 +148,11 @@ export async function executeBulkDownload(input: {
       pages,
       artifacts: [artifact],
       mappingRecords: [mapping],
-      error: ""
+      error: "",
+      rowSelection: selected.rowSelection
     };
   } catch (error) {
-    return failed("task_failed", String(error));
+    return failed("task_failed", String(error), selected.rowSelection);
   }
 }
 
@@ -134,7 +173,8 @@ async function detachOnBatchSavePrint(
   config: LsegConfig,
   task: RequestTask,
   estimatedPages: number,
-  baseline: Map<string, number>
+  baseline: PdfLandingBaseline,
+  rowSelection: DownloadRowSelection | undefined
 ): Promise<BulkDownloadResult | null> {
   // User-observed behavior: once BatchSavePrint opens under CDP attachment,
   // direct download reliability drops. Detach immediately to let native browser
@@ -147,11 +187,22 @@ async function detachOnBatchSavePrint(
     const urls = page.context().pages().map((p) => p.url());
     if (urls.some(isBatchSavePrintAppUrl)) {
       await page.context().browser()?.close().catch(() => undefined);
-      const landed = await waitForLandedPdfs(config, task.taskId, baseline, 150_000);
-      if (landed.length === 0) {
-        return failed("special_company_case", "human_review_required:pdf_landing_timeout_after_batchsaveprint");
+      const expectedPdfCount = expectedNativePdfCount(rowSelection);
+      const landed = await waitForLandedPdfs(
+        config,
+        task.taskId,
+        baseline,
+        nativePdfWaitTimeoutMs(expectedPdfCount),
+        expectedPdfCount
+      );
+      if (!landed.complete) {
+        return failed(
+          "special_company_case",
+          `human_review_required:pdf_landing_incomplete_after_batchsaveprint:expected=${landed.expected};landed=${landed.paths.length};active=${landed.activeDownloads}`,
+          rowSelection
+        );
       }
-      return buildNativeLandingResult(config, task, landed, estimatedPages);
+      return buildNativeLandingResult(config, task, landed.paths, estimatedPages, rowSelection);
     }
     await page.waitForTimeout(250);
   }
@@ -182,18 +233,20 @@ async function ensureEligibleRowsSelected(
       return {
         ok: false,
         status,
-        error: `${prefix}:${compactResultReviewReason(review)}`
+        error: `${prefix}:${compactResultReviewReason(review)}`,
+        rowSelection: buildRowSelection(review, 0)
       };
     }
 
     const selected = await selectResultRowsByIndex(scope, review.autoSelectRowIndexes);
     if (selected.selected > 0) {
-      return { ok: true, status: "no_downloadable_report", error: "" };
+      return { ok: true, status: "no_downloadable_report", error: "", rowSelection: buildRowSelection(review, selected.selected) };
     }
     return {
       ok: false,
       status: "no_downloadable_report",
-      error: `row_checkbox_selection_not_confirmed:requested=${selected.requested};selected=${selected.selected};inspectable=${selected.inspectableRows}`
+      error: `row_checkbox_selection_not_confirmed:requested=${selected.requested};selected=${selected.selected};inspectable=${selected.inspectableRows}`,
+      rowSelection: buildRowSelection(review, selected.selected)
     };
   }
 
@@ -201,6 +254,42 @@ async function ensureEligibleRowsSelected(
   return fallbackSelected
     ? { ok: true, status: "no_downloadable_report", error: "" }
     : { ok: false, status: "no_downloadable_report", error: "select_all_fallback_failed_no_rows_selected" };
+}
+
+function buildRowSelection(review: ResultRowsReview, selected: number): DownloadRowSelection {
+  const selectedRows = review.reviews.filter((row) => row.review.autoSelect).map(rowSelectionItem);
+  const rejectedRows = review.reviews.filter((row) => !row.review.autoSelect).map(rowSelectionItem);
+  return {
+    inspectableRows: review.inspectableRows,
+    requested: selectedRows.length,
+    selected,
+    tickerMatched: selectedRows.filter((row) => row.category === "ticker_matched").length,
+    tickerMismatch: selectedRows.filter((row) => row.category === "ticker_mismatch").length,
+    selectedRows,
+    rejectedRows
+  };
+}
+
+function rowSelectionItem(row: ResultRowsReview["reviews"][number]): DownloadRowSelectionItem {
+  return {
+    rowIndex: row.rowIndex,
+    category: row.review.downloadCategory,
+    date: row.dateText,
+    available: row.availableText,
+    company: row.companyName,
+    ticker: row.tickerText,
+    title: row.titleText,
+    pages: row.pagesText,
+    contributor: row.contributorText,
+    reasons: row.review.reasons
+  };
+}
+
+function bulkReportTitle(rowSelection: DownloadRowSelection | undefined): string {
+  if (!rowSelection) {
+    return "(bulk_selected_results)";
+  }
+  return `(bulk_selected_results;ticker_matched=${rowSelection.tickerMatched};ticker_mismatch=${rowSelection.tickerMismatch};selected=${rowSelection.selected})`;
 }
 
 function compactResultReviewReason(review: ReturnType<typeof reviewResultRows>): string {
@@ -217,21 +306,28 @@ function compactResultReviewReason(review: ReturnType<typeof reviewResultRows>):
   return `inspectable=${review.inspectableRows};auto=${review.autoSelectRowIndexes.length};human=${review.humanReviewRowIndexes.length};rejected=${review.rejectedRowIndexes.length};reasons=${reasons}`;
 }
 
-async function snapshotPdfCandidates(config: LsegConfig, taskId: string): Promise<Map<string, number>> {
+async function snapshotPdfCandidates(config: LsegConfig, taskId: string): Promise<PdfLandingBaseline> {
+  const capturedAtMs = Date.now();
   const files = await listPdfCandidates(config, taskId);
-  return new Map(files.map((file) => [file.path, file.mtimeMs]));
+  return {
+    capturedAtMs,
+    pdfMtimes: new Map(files.map((file) => [file.path, file.mtimeMs]))
+  };
 }
 
 async function waitForLandedPdfs(
   config: LsegConfig,
   taskId: string,
-  baseline: Map<string, number>,
-  timeoutMs: number
-): Promise<string[]> {
+  baseline: PdfLandingBaseline,
+  timeoutMs: number,
+  expectedPdfCount: number
+): Promise<PdfLandingResult> {
+  const expected = Math.max(1, expectedPdfCount);
   const deadline = Date.now() + timeoutMs;
+  let latest: PdfLandingResult = { complete: false, paths: [], expected, activeDownloads: 0 };
   while (Date.now() < deadline) {
     const candidates = await listPdfCandidates(config, taskId);
-    const fresh = candidates.filter((file) => !baseline.has(file.path) || file.mtimeMs > (baseline.get(file.path) ?? 0));
+    const fresh = candidates.filter((file) => !baseline.pdfMtimes.has(file.path) || file.mtimeMs > (baseline.pdfMtimes.get(file.path) ?? 0));
     const stable: string[] = [];
     for (const file of fresh) {
       const before = await stat(file.path).catch(() => null);
@@ -244,12 +340,32 @@ async function waitForLandedPdfs(
         stable.push(file.path);
       }
     }
-    if (stable.length > 0) {
-      return stable;
+    const activeDownloads = await listActiveDownloadTempCandidates(config, taskId, baseline.capturedAtMs);
+    latest = {
+      complete: stable.length >= expected && activeDownloads.length === 0,
+      paths: stable,
+      expected,
+      activeDownloads: activeDownloads.length
+    };
+    if (latest.complete) {
+      return latest;
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  return [];
+  return latest;
+}
+
+export function nativePdfWaitTimeoutMs(expectedPdfCount: number): number {
+  return Math.max(150_000, Math.min(900_000, Math.max(1, expectedPdfCount) * 90_000));
+}
+
+export function expectedNativePdfCount(rowSelection: DownloadRowSelection | undefined): number {
+  return Math.max(1, rowSelection?.selected ?? rowSelection?.requested ?? 1);
+}
+
+export function isActiveDownloadTempFileName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith(".crdownload") || lower.endsWith(".download") || lower.endsWith(".tmp");
 }
 
 async function listPdfCandidates(config: LsegConfig, taskId: string): Promise<Array<{ path: string; mtimeMs: number }>> {
@@ -264,6 +380,29 @@ async function listPdfCandidates(config: LsegConfig, taskId: string): Promise<Ar
       const filePath = path.resolve(directory, entry.name);
       const info = await stat(filePath).catch(() => null);
       if (info?.isFile()) {
+        files.push({ path: filePath, mtimeMs: info.mtimeMs });
+      }
+    }
+  }
+  return files.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+async function listActiveDownloadTempCandidates(
+  config: LsegConfig,
+  taskId: string,
+  capturedAtMs: number
+): Promise<Array<{ path: string; mtimeMs: number }>> {
+  const directories = candidateDownloadDirectories(config, taskId);
+  const files: Array<{ path: string; mtimeMs: number }> = [];
+  for (const directory of directories) {
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isFile() || !isActiveDownloadTempFileName(entry.name)) {
+        continue;
+      }
+      const filePath = path.resolve(directory, entry.name);
+      const info = await stat(filePath).catch(() => null);
+      if (info?.isFile() && info.mtimeMs >= capturedAtMs - 5000) {
         files.push({ path: filePath, mtimeMs: info.mtimeMs });
       }
     }
@@ -290,7 +429,8 @@ async function buildNativeLandingResult(
   config: LsegConfig,
   task: RequestTask,
   landedPaths: string[],
-  estimatedPages: number
+  estimatedPages: number,
+  rowSelection: DownloadRowSelection | undefined
 ): Promise<BulkDownloadResult> {
   const taskDir = path.resolve(config.download_dir, "by_task", task.taskId);
   await mkdir(taskDir, { recursive: true });
@@ -323,7 +463,7 @@ async function buildNativeLandingResult(
       company: task.company,
       dateFrom: task.dateFrom,
       dateTo: task.dateTo,
-      reportTitle: "(native_batchsaveprint_landed_pdf)",
+      reportTitle: bulkReportTitle(rowSelection),
       reportDate: "",
       pages,
       filePath: targetPath,
@@ -341,7 +481,8 @@ async function buildNativeLandingResult(
     pages: artifacts.reduce((sum, artifact) => sum + artifact.pages, 0),
     artifacts,
     mappingRecords,
-    error: ""
+    error: "",
+    rowSelection
   };
 }
 
@@ -488,13 +629,18 @@ async function uniquePath(filePath: string): Promise<string> {
   throw new Error(`Could not allocate unique path for ${filePath}`);
 }
 
-function failed(status: "no_downloadable_report" | "task_failed" | "special_company_case", error: string): BulkDownloadResult {
+function failed(
+  status: "no_downloadable_report" | "task_failed" | "special_company_case",
+  error: string,
+  rowSelection?: DownloadRowSelection
+): BulkDownloadResult {
   return {
     ok: false,
     status,
     pages: 0,
     artifacts: [],
     mappingRecords: [],
-    error
+    error,
+    rowSelection
   };
 }

@@ -236,6 +236,12 @@ async function runOneTask(input: {
 
     const downloadSourceUrl = page.url();
     const download = await executeBulkDownload({ page, scope, config, task, estimatedPages });
+    if (download.rowSelection) {
+      await logger.event(download.rowSelection.selected > 0 ? "INFO" : "WARN", "Download row selection", {
+        taskId: task.taskId,
+        ...download.rowSelection
+      });
+    }
     if (!download.ok || (config.behavior.require_download_artifacts && download.artifacts.length === 0)) {
       const failureStatus = download.status === "downloaded" ? "task_failed" : download.status;
       await writeFailure(store, task, failureStatus, download.error || "download_failed_without_artifact", downloadSourceUrl);

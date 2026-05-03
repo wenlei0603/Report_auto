@@ -29,12 +29,15 @@ export interface ResultRowReview {
   eligible: boolean;
   needsHumanReview: boolean;
   autoSelect: boolean;
+  downloadCategory: "ticker_matched" | "ticker_mismatch" | "none";
   reasons: string[];
 }
 
 export interface ResultRowsReview {
   inspectableRows: number;
   autoSelectRowIndexes: number[];
+  tickerMatchedRowIndexes: number[];
+  tickerMismatchRowIndexes: number[];
   humanReviewRowIndexes: number[];
   rejectedRowIndexes: number[];
   reviews: Array<ResultRowSnapshot & { review: ResultRowReview }>;
@@ -93,25 +96,35 @@ function tickerMatches(rowTicker: string, taskTicker: string): boolean {
   return pattern.test(rowTicker);
 }
 
+function targetTickerInTitle(titleText: string, taskTicker: string): boolean {
+  const tickerNorm = taskTicker.trim();
+  if (!tickerNorm) {
+    return false;
+  }
+  const pattern = new RegExp(`\\b${escapeRegExp(tickerNorm)}\\b`, "i");
+  return pattern.test(titleText);
+}
+
 export function evaluateResultRow(
   row: ResultRowSnapshot,
   task: ResultReviewTask
 ): ResultRowReview {
   const reasons: string[] = [];
+  const hardReasons: string[] = [];
 
   let rowDateIso = "";
   try {
     rowDateIso = dateTextIso(row.dateText);
   } catch {
-    reasons.push("date_unparseable");
+    hardReasons.push("date_unparseable");
   }
   if (rowDateIso) {
     const eventWindow = eventWindowForTask(task);
     if (compareIsoDates(rowDateIso, task.dateFrom) < 0 || compareIsoDates(rowDateIso, task.dateTo) > 0) {
-      reasons.push("date_out_of_range");
+      hardReasons.push("date_out_of_range");
     }
     if (compareIsoDates(rowDateIso, eventWindow.from) < 0 || compareIsoDates(rowDateIso, eventWindow.to) > 0) {
-      reasons.push("date_out_of_event_window");
+      hardReasons.push("date_out_of_event_window");
     }
   }
 
@@ -119,52 +132,57 @@ export function evaluateResultRow(
   try {
     availableIso = dateTextIso(row.availableText);
   } catch {
-    reasons.push("available_unparseable");
+    hardReasons.push("available_unparseable");
   }
   if (availableIso && (compareIsoDates(availableIso, task.dateFrom) < 0 || compareIsoDates(availableIso, task.dateTo) > 0)) {
-    reasons.push("available_out_of_range");
+    hardReasons.push("available_out_of_range");
   }
 
   const norm = (s: string) => s.trim().toLowerCase();
   if (norm(row.contributorText) !== norm(task.contributor)) {
-    reasons.push("contributor_mismatch");
+    hardReasons.push("contributor_mismatch");
   }
 
   const pages = Number.parseInt(row.pagesText, 10);
   if (Number.isFinite(pages) && pages > task.maxPages) {
-    reasons.push("pages_exceed_limit");
+    hardReasons.push("pages_exceed_limit");
   }
   if (!Number.isFinite(pages)) {
-    reasons.push("pages_unparseable");
+    hardReasons.push("pages_unparseable");
   }
 
   if (!companyMatches(row.companyName, task.company)) {
-    reasons.push("company_mismatch");
+    hardReasons.push("company_mismatch");
   }
-  if (!isAmbiguousTicker(row.tickerText, row.tickerExtraCount) && !tickerMatches(row.tickerText, task.ticker)) {
+  const hasAmbiguousTicker = isAmbiguousTicker(row.tickerText, row.tickerExtraCount);
+  const strictTickerMatch = tickerMatches(row.tickerText, task.ticker) && row.tickerExtraCount === 0 && row.companyExtraCount === 0;
+  const visibleTickerMatches = tickerMatches(row.tickerText, task.ticker) || targetTickerInTitle(row.titleText, task.ticker);
+  if (!visibleTickerMatches) {
     reasons.push("ticker_mismatch");
   }
 
-  const eligible = !reasons.length;
+  const eligible = hardReasons.length === 0;
 
   if (row.companyExtraCount > 0) {
     reasons.push("multi_company_row");
   }
-  if (isAmbiguousTicker(row.tickerText, row.tickerExtraCount)) {
+  if (hasAmbiguousTicker) {
     reasons.push("ambiguous_ticker");
   }
-  if (!isTitleCompanySpecific(row.companyName, row.titleText)) {
+  if (!isTitleCompanySpecific(task.company, row.titleText) && !targetTickerInTitle(row.titleText, task.ticker)) {
     reasons.push("title_not_company_specific");
   }
 
   const reviewFlags = ["multi_company_row", "ambiguous_ticker", "title_not_company_specific"] as const;
   const needsHumanReview = reviewFlags.some((k) => reasons.includes(k));
+  const downloadCategory = !eligible ? "none" : strictTickerMatch ? "ticker_matched" : "ticker_mismatch";
 
   return {
     eligible,
     needsHumanReview,
-    autoSelect: eligible && !needsHumanReview,
-    reasons
+    autoSelect: downloadCategory !== "none",
+    downloadCategory,
+    reasons: [...hardReasons, ...reasons]
   };
 }
 
@@ -173,6 +191,8 @@ export function reviewResultRows(rows: ResultRowSnapshot[], task: ResultReviewTa
   return {
     inspectableRows: rows.length,
     autoSelectRowIndexes: reviews.filter((row) => row.review.autoSelect).map((row) => row.rowIndex),
+    tickerMatchedRowIndexes: reviews.filter((row) => row.review.downloadCategory === "ticker_matched").map((row) => row.rowIndex),
+    tickerMismatchRowIndexes: reviews.filter((row) => row.review.downloadCategory === "ticker_mismatch").map((row) => row.rowIndex),
     humanReviewRowIndexes: reviews.filter((row) => row.review.eligible && row.review.needsHumanReview).map((row) => row.rowIndex),
     rejectedRowIndexes: reviews.filter((row) => !row.review.eligible).map((row) => row.rowIndex),
     reviews
