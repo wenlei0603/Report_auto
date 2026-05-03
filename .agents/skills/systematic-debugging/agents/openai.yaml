@@ -1,0 +1,7 @@
+interface:
+  display_name: "Systematic Debugging"
+  short_description: "Root-cause debugging before fixes"
+  brand_color: "#EF4444"
+  default_prompt: "Use $systematic-debugging to investigate root cause before proposing fixes."
+policy:
+  allow_implicit_invocation: true

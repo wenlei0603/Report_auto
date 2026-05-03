@@ -1,0 +1,71 @@
+{
+  "href": "https://workspace.refinitiv.com/Apps/research-next/2.22.3/#/?st=OAPermID",
+  "title": "ADVRES",
+  "hasCompanyInput": false,
+  "hasSearchButton": true,
+  "hasClearButton": true,
+  "hasSearchOptionsText": false,
+  "hasDateRange": true,
+  "bodyText": "Primary company only Date Range 01-Feb-2026 00:00 To 02-May-2026 23:15 Page Count Contributors Include Exclude Exclude Contributors by type Analysts Subjects/Topics Report Types Industry Countries/Regions Document ID File Types Languages Last run: May 02, 11:19:10 SEARCH CLEAR All Subscription Real-Time ANALYZE RESULTS DOC INFO SNIPPETS DOWNLOAD ANALYZE RESULTS UPDATE COMPANIES Eli Lilly and Co (58) Tesla Inc (52) Rockwell Automation Inc (34) Emerson Electric Co (33) Trane Technologies PLC (33) Acuity Inc (32) Lennox International Inc (32) Ingersoll Rand Inc (32) Amazon.com Inc (31) Eaton Corporation PLC (31) See More INDUSTRIES Industrials (1333) Consumer Cyclicals (1332) Technology (1173) Healthcare (957) Industrial Goods (776) Financials (742) Consumer Non-Cyclicals (702) Software & IT Services (3) (694) Software & IT Services (2) (694) Pharmaceuticals & Medical Research (685) See More COUNTRIES/REGIONS United States (5027) China (927) United Kingdom (598) Japan (553) Germany (309) ",
+  "candidates": [
+    {
+      "tag": "APP-BUTTON",
+      "className": "edit-filters-button",
+      "tooltip": "Search options",
+      "title": "",
+      "ariaLabel": "",
+      "icon": "",
+      "text": "",
+      "outerHTML": "<app-button _ngcontent-snb-c103=\"\" pi-type=\"icon-only-button-elf\" pi-button-name=\"FilterIconClick\" class=\"edit-filters-button\" _nghost-snb-c14=\"\" title=\"\" tooltip=\"Search options\"><coral-button _ngcontent-snb-c14=\"\" tabindex=\"0\" id=\"undefined\" title=\"\" tooltip=\"\" aria-disabled=\"false\" aria-readonly=\"false\" textpos=\"after\" icon=\"filter\" toggles=\"\" empty=\"\" active=\"\"></coral-button><!----><!----></app-button>"
+    },
+    {
+      "tag": "CORAL-BUTTON",
+      "className": "",
+      "tooltip": "",
+      "title": "",
+      "ariaLabel": "",
+      "icon": "filter",
+      "text": "",
+      "outerHTML": "<coral-button _ngcontent-snb-c14=\"\" tabindex=\"0\" id=\"undefined\" title=\"\" tooltip=\"\" aria-disabled=\"false\" aria-readonly=\"false\" textpos=\"after\" icon=\"filter\" toggles=\"\" empty=\"\" active=\"\"></coral-button>"
+    }
+  ],
+  "companyInputs": [],
+  "activePanels": [
+    {
+      "tag": "APP-FILTERS-VIEW",
+      "className": "",
+      "text": "Primary company only Portfolios Private Shared Index Industry Dynamic Lists Search Add Remove Remove All OK Cancel Boolean Searching - Free Text mode Boolean Searching - Free Text modeDescriptionExampleParentheses for complex grouping(Willi",
+      "outerHTML": "<app-filters-view _ngcontent-snb-c155=\"\" _nghost-snb-c129=\"\"><coral-panel _ngcontent-snb-c129=\"\" class=\"filters-view\"><app-filters-list _ngcontent-snb-c129=\"\" class=\"filters-list\" _nghost-snb-c126=\"\"><!----><div _ngcontent-snb-c126=\"\" class=\"top-filters-panel active\"><app-companies-filter _nghost-snb-c72=\"\" class=\"filter\"><div _ngcontent-snb-c72=\"\" class=\"company-filter-container\"><div _ngcontent-snb-c72=\"\" class=\"comapny-filter\"><div _ngcontent-snb-c72=\"\" class=\"wrapper\"><app-pin-icon _ngcontent-snb-c72=\"\" _nghost-snb-c55=\"\"><app-icon _ngcontent-snb-c55=\"\" class=\"pin-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Pin selection as default\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"pin\"></coral-icon><!----><!----></app-icon></app-pin-icon><div _ngcontent-snb-c72=\"\" class=\"atlas-autosuggest-wrapper\"><app-multi-select _ngcontent-snb-c72=\"\" class=\"company-multi-select\" _nghost-snb-c68=\"\"><emerald-multi-select _ngcontent-snb-c68=\"\" class=\"multi-select\" tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\" loading=\"false\" style=\"--panel-width: 500px;\"></emerald-multi-select></app-multi-select></div></div><app-error-messages _ngcontent-snb-c72=\"\" class=\"error\" style=\"display: none;\"><!----><"
+    },
+    {
+      "tag": "CORAL-PANEL",
+      "className": "filters-view",
+      "text": "Primary company only Portfolios Private Shared Index Industry Dynamic Lists Search Add Remove Remove All OK Cancel Boolean Searching - Free Text mode Boolean Searching - Free Text modeDescriptionExampleParentheses for complex grouping(Willi",
+      "outerHTML": "<coral-panel _ngcontent-snb-c129=\"\" class=\"filters-view\"><app-filters-list _ngcontent-snb-c129=\"\" class=\"filters-list\" _nghost-snb-c126=\"\"><!----><div _ngcontent-snb-c126=\"\" class=\"top-filters-panel active\"><app-companies-filter _nghost-snb-c72=\"\" class=\"filter\"><div _ngcontent-snb-c72=\"\" class=\"company-filter-container\"><div _ngcontent-snb-c72=\"\" class=\"comapny-filter\"><div _ngcontent-snb-c72=\"\" class=\"wrapper\"><app-pin-icon _ngcontent-snb-c72=\"\" _nghost-snb-c55=\"\"><app-icon _ngcontent-snb-c55=\"\" class=\"pin-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Pin selection as default\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"pin\"></coral-icon><!----><!----></app-icon></app-pin-icon><div _ngcontent-snb-c72=\"\" class=\"atlas-autosuggest-wrapper\"><app-multi-select _ngcontent-snb-c72=\"\" class=\"company-multi-select\" _nghost-snb-c68=\"\"><emerald-multi-select _ngcontent-snb-c68=\"\" class=\"multi-select\" tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\" loading=\"false\" style=\"--panel-width: 500px;\"></emerald-multi-select></app-multi-select></div></div><app-error-messages _ngcontent-snb-c72=\"\" class=\"error\" style=\"display: none;\"><!----></app-error-messages></div><!----><div _ngcontent-snb-c72=\"\" c"
+    },
+    {
+      "tag": "APP-FILTERS-LIST",
+      "className": "filters-list",
+      "text": "Primary company only Portfolios Private Shared Index Industry Dynamic Lists Search Add Remove Remove All OK Cancel Boolean Searching - Free Text mode Boolean Searching - Free Text modeDescriptionExampleParentheses for complex grouping(Willi",
+      "outerHTML": "<app-filters-list _ngcontent-snb-c129=\"\" class=\"filters-list\" _nghost-snb-c126=\"\"><!----><div _ngcontent-snb-c126=\"\" class=\"top-filters-panel active\"><app-companies-filter _nghost-snb-c72=\"\" class=\"filter\"><div _ngcontent-snb-c72=\"\" class=\"company-filter-container\"><div _ngcontent-snb-c72=\"\" class=\"comapny-filter\"><div _ngcontent-snb-c72=\"\" class=\"wrapper\"><app-pin-icon _ngcontent-snb-c72=\"\" _nghost-snb-c55=\"\"><app-icon _ngcontent-snb-c55=\"\" class=\"pin-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Pin selection as default\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"pin\"></coral-icon><!----><!----></app-icon></app-pin-icon><div _ngcontent-snb-c72=\"\" class=\"atlas-autosuggest-wrapper\"><app-multi-select _ngcontent-snb-c72=\"\" class=\"company-multi-select\" _nghost-snb-c68=\"\"><emerald-multi-select _ngcontent-snb-c68=\"\" class=\"multi-select\" tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\" loading=\"false\" style=\"--panel-width: 500px;\"></emerald-multi-select></app-multi-select></div></div><app-error-messages _ngcontent-snb-c72=\"\" class=\"error\" style=\"display: none;\"><!----></app-error-messages></div><!----><div _ngcontent-snb-c72=\"\" class=\"company-buttons-container\"><app-checkbox _ngcontent"
+    },
+    {
+      "tag": "DIV",
+      "className": "top-filters-panel active",
+      "text": "Primary company only Portfolios Private Shared Index Industry Dynamic Lists Search Add Remove Remove All OK Cancel Boolean Searching - Free Text mode Boolean Searching - Free Text modeDescriptionExampleParentheses for complex grouping(Willi",
+      "outerHTML": "<div _ngcontent-snb-c126=\"\" class=\"top-filters-panel active\"><app-companies-filter _nghost-snb-c72=\"\" class=\"filter\"><div _ngcontent-snb-c72=\"\" class=\"company-filter-container\"><div _ngcontent-snb-c72=\"\" class=\"comapny-filter\"><div _ngcontent-snb-c72=\"\" class=\"wrapper\"><app-pin-icon _ngcontent-snb-c72=\"\" _nghost-snb-c55=\"\"><app-icon _ngcontent-snb-c55=\"\" class=\"pin-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Pin selection as default\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"pin\"></coral-icon><!----><!----></app-icon></app-pin-icon><div _ngcontent-snb-c72=\"\" class=\"atlas-autosuggest-wrapper\"><app-multi-select _ngcontent-snb-c72=\"\" class=\"company-multi-select\" _nghost-snb-c68=\"\"><emerald-multi-select _ngcontent-snb-c68=\"\" class=\"multi-select\" tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\" loading=\"false\" style=\"--panel-width: 500px;\"></emerald-multi-select></app-multi-select></div></div><app-error-messages _ngcontent-snb-c72=\"\" class=\"error\" style=\"display: none;\"><!----></app-error-messages></div><!----><div _ngcontent-snb-c72=\"\" class=\"company-buttons-container\"><app-checkbox _ngcontent-snb-c72=\"\" class=\"primary-only-label\"><coral-checkbox tabindex=\"0\" aria-disabled=\"false\""
+    },
+    {
+      "tag": "CORAL-PANEL",
+      "className": "sidebar-content",
+      "text": "Analyze ResultsAnalyze ResultsUPDATE Companies Eli Lilly and Co(58)Tesla Inc(52)Rockwell Automation Inc(34)Emerson Electric Co(33)Trane Technologies PLC(33)Acuity Inc(32)Lennox International Inc(32)Ingersoll Rand Inc(32)Amazon.com Inc(31)Ea",
+      "outerHTML": "<coral-panel _ngcontent-snb-c155=\"\" class=\"sidebar-content\"><app-analyze-results _ngcontent-snb-c155=\"\" _nghost-snb-c149=\"\"><coral-header _ngcontent-snb-c149=\"\" level=\"2\" class=\"analyze-results-header\"><span _ngcontent-snb-c149=\"\">Analyze Results</span><span _ngcontent-snb-c149=\"\" class=\"analyze-results-icon\"><coral-icon _ngcontent-snb-c149=\"\" icon=\"info\" title=\"\" tooltip=\"Top entries by document count\"></coral-icon></span><a _ngcontent-snb-c149=\"\" class=\"analyze-results-postfilter-count\"><!----><coral-popup-panel _ngcontent-snb-c149=\"\" no-overlap=\"\" with-shadow=\"\" class=\"analyze-results-label-tooltip\" tabindex=\"-1\"><table _ngcontent-snb-c149=\"\" class=\"analyze-results-tooltip-content\"><caption _ngcontent-snb-c149=\"\" class=\"hidden-header\">Analyze Results</caption><thead _ngcontent-snb-c149=\"\" class=\"hidden-header\"><tr _ngcontent-snb-c149=\"\"><th _ngcontent-snb-c149=\"\"></th><th _ngcontent-snb-c149=\"\"></th></tr></thead><tbody _ngcontent-snb-c149=\"\"><!----></tbody></table></coral-popup-panel></a><div _ngcontent-snb-c149=\"\" slot=\"right\" class=\"analyze-results-header_buttons\"><app-button _ngcontent-snb-c149=\"\" _nghost-snb-c14=\"\"><coral-button _ngcontent-snb-c14=\"\" tabindex=\"0\" id=\"undefin"
+    },
+    {
+      "tag": "CORAL-PANEL",
+      "className": "main-content",
+      "text": "1-200 of 5,027 recordsKeyword Snippets Close",
+      "outerHTML": "<coral-panel _ngcontent-snb-c155=\"\" class=\"main-content\"><app-main-grid _ngcontent-snb-c155=\"\" _nghost-snb-c151=\"\"><app-tr-grid _ngcontent-snb-c151=\"\" _nghost-snb-c38=\"\"><emerald-grid _ngcontent-snb-c38=\"\" class=\"refi-tr-grid\"><!----></emerald-grid><!----></app-tr-grid><!----><div _ngcontent-snb-c151=\"\" class=\"info-panel\"><div _ngcontent-snb-c151=\"\" class=\"scroll-top-button-wrapper\"><app-icon _ngcontent-snb-c151=\"\" class=\"scroll-top-button\" _nghost-snb-c28=\"\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"up\"></coral-icon><!----><!----></app-icon></div><!----></div><coral-header _ngcontent-snb-c151=\"\" level=\"3\" class=\"pagination\"><div _ngcontent-snb-c151=\"\" class=\"pagination-container\"><div _ngcontent-snb-c151=\"\" class=\"grid-state-label\"><span _ngcontent-snb-c151=\"\">1-200 of 5,027 records</span><!----><!----></div><app-pagination _ngcontent-snb-c151=\"\"><emerald-pagination style=\"width: 100%;\"></emerald-pagination></app-pagination></div></coral-header><!----><app-saved-searches-save-panel _ngcontent-snb-c151=\"\"></app-saved-searches-save-panel></app-main-grid><app-snippets-modal _ngcontent-snb-c155=\"\" _nghost-snb-c152=\"\"><app-popup-dialog _ngcontent-snb-c152=\"\" class=\"popup-dialog\" _nghost-"
+    }
+  ]
+}

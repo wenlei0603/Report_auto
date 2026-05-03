@@ -1,0 +1,67 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+# Project-local Codex baseline for the LSEG Research Next rewrite.
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+persistent_instructions = "Follow project AGENTS.md guidelines. Use available MCP servers when they can help."
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+startup_timeout_sec = 30
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp@latest"]
+startup_timeout_sec = 30
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest", "--extension"]
+startup_timeout_sec = 30
+
+[mcp_servers.sequential-thinking]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+startup_timeout_sec = 30
+
+[mcp_servers.evalview]
+command = "python"
+args = ["-m", "evalview", "mcp", "serve"]
+startup_timeout_sec = 30
+
+[features]
+multi_agent = true
+
+[profiles.strict]
+approval_policy = "on-request"
+sandbox_mode = "read-only"
+web_search = "cached"
+
+[profiles.yolo]
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+[agents.explorer]
+description = "Read-only codebase explorer for gathering evidence before changes are proposed."
+config_file = "agents/explorer.toml"
+
+[agents.reviewer]
+description = "PR reviewer focused on correctness, security, and missing tests."
+config_file = "agents/reviewer.toml"
+
+[agents.browser_debugger]
+description = "Browser automation debugger for frame scope, network evidence, shadow DOM, downloads, and UI state drift."
+config_file = "agents/browser-debugger.toml"
+
+[agents.test_author]
+description = "Test-focused agent for writing failing tests first, then building unit, integration, and Playwright coverage."
+config_file = "agents/test-author.toml"

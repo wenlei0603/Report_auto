@@ -1,0 +1,116 @@
+workspace_url: "https://workspace.refinitiv.com/web/Apps/research-next/?st=OAPermID#/?st=OAPermID"
+input_file: "D:/20-temp/0422/lseg_request_by_call_2015_2018_end_plus_7d.txt"
+download_dir: "output/downloads"
+mapping_csv: "output/task_file_mapping.csv"
+status_log_jsonl: "logs/task_status.jsonl"
+progress_csv: "output/task_progress.csv"
+run_log_jsonl: "logs/run_log.jsonl"
+daily_page_limit: 500
+max_downloads: 1
+cdp_endpoint: "http://127.0.0.1:9222"
+
+browser:
+  headless: false
+  slow_mo_ms: 100
+  fallback_channel: "chrome"
+  user_data_dir: "D:/chrome-rpa-profile"
+
+filters:
+  contributor: "Morgan Stanley"
+  country: "USA"
+  industry: "none"
+
+timeouts:
+  default_ms: 20000
+  download_ms: 90000
+  login_wait_seconds: 600
+
+behavior:
+  apply_global_filters_once: true
+  app_restart_attempts: 3
+  recover_from_batchsaveprint: true
+  require_download_artifacts: true
+  debug_max_tasks: 1
+
+selectors:
+  company_input:
+    - "input[placeholder*='Search by company or portfolio' i]"
+    - "input[placeholder*='company or portfolio' i]"
+    - "input[placeholder*='Company' i]"
+    - "input[aria-label*='Company' i]"
+  company_option_items:
+    - "[role='option']"
+    - "li[role='option']"
+    - ".suggestion-item"
+    - "[class*='suggest' i] li"
+  apply_buttons:
+    - "app-button[pi-button-name='SearchButtonClick']"
+    - "app-button[pi-button-name='SearchButtonClick'] coral-button"
+    - "button:has-text('SEARCH')"
+    - "button:has-text('Search')"
+    - "button:has-text('Apply')"
+  modify_query_buttons:
+    - "app-filters-label app-icon.edit-icon"
+    - "app-filters-label .edit-icon"
+    - "app-filters-label coral-icon[icon='edit']"
+    - ".additional-label-content app-icon.edit-icon"
+    - ".additional-label-content .edit-icon"
+    - "app-icon.edit-icon"
+    - "app-icon.edit-icon[tooltip='Search options']"
+    - "app-button.edit-filters-button"
+    - "app-button[tooltip='Search options']"
+    - "app-button[pi-button-name='FilterIconClick']"
+    - "app-button.edit-filters-button coral-button[icon='filter']"
+    - "button:has-text('MODIFY QUERY CONDITIONS')"
+    - "button:has-text('MODIFY SEARCH CRITERIA')"
+    - "a:has-text('MODIFY QUERY CONDITIONS')"
+    - "a:has-text('MODIFY SEARCH CRITERIA')"
+    - "text=/\\bmodify\\s+(query\\s+conditions|search\\s+criteria)\\b/i"
+  result_rows:
+    - "[data-testid*='result' i] [role='row']"
+    - "table tbody tr"
+    - "[role='rowgroup'] [role='row']"
+  no_results_text:
+    - "text=/no\\s+results/i"
+    - "text=/no\\s+documents/i"
+    - "text=/no\\s+reports/i"
+  next_page_buttons:
+    - "button[aria-label*='Next' i]"
+    - "button:has-text('Next')"
+  download_buttons:
+    - "button:has-text('DOWNLOAD')"
+    - "button:has-text('Download')"
+    - "app-button:has-text('DOWNLOAD')"
+    - "app-button:has-text('Download')"
+    - "coral-button:has-text('DOWNLOAD')"
+    - "coral-button:has-text('Download')"
+    - "[role='button']:has-text('DOWNLOAD')"
+    - "[role='button']:has-text('Download')"
+    - "a:has-text('Download')"
+    - "button[aria-label*='download' i]"
+  select_all_checkboxes:
+    - "coral-checkbox.select-doc-checkbox"
+    - "input[aria-label*='Select all' i]"
+    - "[aria-label*='Select all' i]"
+  save_to_pc_buttons:
+    - "button:has-text('SAVE DOCUMENTS TO PC')"
+    - "button:has-text('Save Documents to PC')"
+    - "button:has-text('Save to my PC')"
+    - "button:has-text('SAVE TO MY PC')"
+    - "app-button:has-text('SAVE DOCUMENTS TO PC')"
+    - "app-button:has-text('Save Documents to PC')"
+    - "coral-button:has-text('SAVE DOCUMENTS TO PC')"
+    - "coral-button:has-text('Save Documents to PC')"
+    - "[role='button']:has-text('SAVE DOCUMENTS TO PC')"
+    - "[role='button']:has-text('Save Documents to PC')"
+  pages_text:
+    - "text=/\\b\\d+\\s*pages?\\b/i"
+  report_title:
+    - "[data-testid*='title' i]"
+    - "h1"
+    - "h2"
+    - "[role='heading']"
+  report_date:
+    - "[data-testid*='date' i]"
+    - "time"
+    - "text=/\\b(20\\d{2}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{1,2}[-/]\\d{1,2}[-/]20\\d{2})\\b/"

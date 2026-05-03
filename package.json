@@ -1,0 +1,38 @@
+{
+  "name": "lseg-research-next-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript + Playwright automation for LSEG Research Next report downloads.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build --silent && node dist/src/cli.js",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "browser:start": "powershell -ExecutionPolicy Bypass -File scripts/start-chrome-cdp.ps1",
+    "automation:dry-run": "npm run build --silent && node dist/src/cli.js run --dry-run",
+    "automation:inspect": "npm run build --silent && node dist/src/cli.js inspect"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.55.0",
+    "commander": "^14.0.2",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.55.0",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "eslint": "^9.39.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vitest": "^4.0.14"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

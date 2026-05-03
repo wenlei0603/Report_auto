@@ -1,0 +1,135 @@
+{
+  "href": "https://workspace.refinitiv.com/Apps/research-next/2.22.3/#/?st=OAPermID",
+  "title": "ADVRES",
+  "bodyText": "Date: 01-Feb-2026 To 02-May-2026; Pages: <= 23; Countries/Regions: United States of America; 1 Contributors: Morgan Stanley; 1 SEARCH CLEAR All Subscription Real-Time ANALYZE RESULTS DOC INFO SNIPPETS DOWNLOAD ANALYZE RESULTS UPDATE COMPANIES Eli Lilly and Co (58) Tesla Inc (52) Rockwell Automation Inc (34) Emerson Electric Co (33) Trane Technologies PLC (33) Acuity Inc (32) Lennox International Inc (32) Ingersoll Rand Inc (32) Amazon.com Inc (31) Eaton Corporation PLC (31) See More INDUSTRIES I",
+  "candidates": [
+    {
+      "tag": "APP-ICON",
+      "className": "edit-icon",
+      "text": "",
+      "rect": {
+        "x": 592.0390625,
+        "y": 65,
+        "width": 16,
+        "height": 16
+      },
+      "targetTag": "APP-ICON",
+      "targetClass": "edit-icon",
+      "targetRole": "",
+      "targetAriaLabel": "",
+      "targetText": "",
+      "targetOuterHTML": "<app-icon _ngcontent-snb-c126=\"\" pi-type=\"icon-elf\" pi-icon-shape=\"edit\" pi-icon-name=\"SearchEditClick\" class=\"edit-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Search options\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"edit\"></coral-icon><!----><!----></app-icon>",
+      "chain": [
+        {
+          "tag": "APP-ICON",
+          "className": "edit-icon",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "",
+          "outerHTML": "<app-icon _ngcontent-snb-c126=\"\" pi-type=\"icon-elf\" pi-icon-shape=\"edit\" pi-icon-name=\"SearchEditClick\" class=\"edit-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Search options\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"edit\"></coral-icon><!----><!----></app-icon>"
+        },
+        {
+          "tag": "DIV",
+          "className": "additional-label-content",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "Save Criteria Set (Subscription) Preview Date: 01-Feb-2026 To 02-May-2026, Pages: <= 23, Countries/Regions (1), Contributors (1)Name Set as Default  Also set as an Alert Notification Style Alert History  Toast  Popup  Eikon Messenger  Sound  Default  Email Expires On OK  Cancel  SEARCH  CLEAR",
+          "outerHTML": "<div _ngcontent-snb-c125=\"\" class=\"additional-label-content\"><app-icon _ngcontent-snb-c126=\"\" pi-type=\"icon-elf\" pi-icon-shape=\"edit\" pi-icon-name=\"SearchEditClick\" class=\"edit-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Search options\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"edit\"></coral-icon><!----><!----></app-icon><div _ngcontent-snb-c129=\"\" buttonsview=\"\" class=\"extended-buttons-list\"><app-saved-searches-drop-list _ngcontent-snb-c129=\"\" _nghost-snb-c128=\"\"><div _ngcontent-snb-c128=\"\" class=\"saved-searches-dropdown-list\"><app-dropdown-button _ngcontent-snb-c128=\"\" _nghost-snb-c127=\"\"><div _ngcontent-snb-c127=\"\" class=\"dropdown-button\" title=\"\" tooltip=\"\"><app-button _ngcontent-snb-c127=\"\" class=\"dropdown-icon-button merged\" _nghost-snb-c14=\"\"><coral-button _ngcontent-snb-c14=\"\" id=\"undefined\" title=\"\" tooltip=\"\" tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\" textpos=\"after\" icon=\"save\" empty=\"\"><app-icon _ngcontent-snb-c127=\"\" class=\"merged-dropdown-icon\" _nghost-snb-c28="
+        },
+        {
+          "tag": "DIV",
+          "className": "filter-list",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "Date: 01-Feb-2026 To 02-May-2026;  Pages: <= 23;  Countries/Regions: United States of America; 1 Contributors: Morgan Stanley; 1 Save Criteria Set (Subscription) Preview Date: 01-Feb-2026 To 02-May-2026, Pages: <= 23, Countries/Regions (1), Contributors (1)Name Set as Default  Also set as an Alert Notification Style Alert History  Toast  Popup  Eikon Messenger  Sound  Default  Email Expires On OK  Cancel  SEARCH  CLEAR",
+          "outerHTML": "<div _ngcontent-snb-c125=\"\" class=\"filter-list\"><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Date:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> 01-Feb-2026 To 02-May-2026</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-separator\">;</span></span><app-pill _ngcontent-snb-c125=\"\" class=\"hidden\"><coral-pill tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\">  </coral-pill><!----><!----></app-pill><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Pages:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> &lt;= 23</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-separator\">;</span></span><app-pill _ngcontent-snb-c125=\"\" class=\"hidden\"><coral-pill tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\">  </coral-pill><!----><!----></app-pill><!----><"
+        },
+        {
+          "tag": "DIV",
+          "className": "filters-label",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "Date: 01-Feb-2026 To 02-May-2026;  Pages: <= 23;  Countries/Regions: United States of America; 1 Contributors: Morgan Stanley; 1 Save Criteria Set (Subscription) Preview Date: 01-Feb-2026 To 02-May-2026, Pages: <= 23, Countries/Regions (1), Contributors (1)Name Set as Default  Also set as an Alert Notification Style Alert History  Toast  Popup  Eikon Messenger  Sound  Default  Email Expires On OK  Cancel  SEARCH  CLEAR",
+          "outerHTML": "<div _ngcontent-snb-c125=\"\" class=\"filters-label\"><app-icon _ngcontent-snb-c125=\"\" class=\"filter-icon\" _nghost-snb-c28=\"\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"filter\"></coral-icon><!----><!----></app-icon><div _ngcontent-snb-c125=\"\" class=\"filter-list\"><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Date:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> 01-Feb-2026 To 02-May-2026</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-separator\">;</span></span><app-pill _ngcontent-snb-c125=\"\" class=\"hidden\"><coral-pill tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\">  </coral-pill><!----><!----></app-pill><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Pages:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> &lt;= 23</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" cl"
+        },
+        {
+          "tag": "APP-FILTERS-LABEL",
+          "className": "",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "Date: 01-Feb-2026 To 02-May-2026;  Pages: <= 23;  Countries/Regions: United States of America; 1 Contributors: Morgan Stanley; 1 Save Criteria Set (Subscription) Preview Date: 01-Feb-2026 To 02-May-2026, Pages: <= 23, Countries/Regions (1), Contributors (1)Name Set as Default  Also set as an Alert Notification Style Alert History  Toast  Popup  Eikon Messenger  Sound  Default  Email Expires On OK  Cancel  SEARCH  CLEAR",
+          "outerHTML": "<app-filters-label _ngcontent-snb-c126=\"\" _nghost-snb-c125=\"\"><div _ngcontent-snb-c125=\"\" class=\"filters-label\"><app-icon _ngcontent-snb-c125=\"\" class=\"filter-icon\" _nghost-snb-c28=\"\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"filter\"></coral-icon><!----><!----></app-icon><div _ngcontent-snb-c125=\"\" class=\"filter-list\"><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Date:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> 01-Feb-2026 To 02-May-2026</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-separator\">;</span></span><app-pill _ngcontent-snb-c125=\"\" class=\"hidden\"><coral-pill tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\">  </coral-pill><!----><!----></app-pill><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Pages:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> &lt;= 23</sp"
+        }
+      ]
+    },
+    {
+      "tag": "CORAL-ICON",
+      "className": "",
+      "text": "",
+      "rect": {
+        "x": 592.0390625,
+        "y": 65,
+        "width": 16,
+        "height": 16
+      },
+      "targetTag": "APP-ICON",
+      "targetClass": "edit-icon",
+      "targetRole": "",
+      "targetAriaLabel": "",
+      "targetText": "",
+      "targetOuterHTML": "<app-icon _ngcontent-snb-c126=\"\" pi-type=\"icon-elf\" pi-icon-shape=\"edit\" pi-icon-name=\"SearchEditClick\" class=\"edit-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Search options\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"edit\"></coral-icon><!----><!----></app-icon>",
+      "chain": [
+        {
+          "tag": "CORAL-ICON",
+          "className": "",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "",
+          "outerHTML": "<coral-icon _ngcontent-snb-c28=\"\" icon=\"edit\"></coral-icon>"
+        },
+        {
+          "tag": "APP-ICON",
+          "className": "edit-icon",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "",
+          "outerHTML": "<app-icon _ngcontent-snb-c126=\"\" pi-type=\"icon-elf\" pi-icon-shape=\"edit\" pi-icon-name=\"SearchEditClick\" class=\"edit-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Search options\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"edit\"></coral-icon><!----><!----></app-icon>"
+        },
+        {
+          "tag": "DIV",
+          "className": "additional-label-content",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "Save Criteria Set (Subscription) Preview Date: 01-Feb-2026 To 02-May-2026, Pages: <= 23, Countries/Regions (1), Contributors (1)Name Set as Default  Also set as an Alert Notification Style Alert History  Toast  Popup  Eikon Messenger  Sound  Default  Email Expires On OK  Cancel  SEARCH  CLEAR",
+          "outerHTML": "<div _ngcontent-snb-c125=\"\" class=\"additional-label-content\"><app-icon _ngcontent-snb-c126=\"\" pi-type=\"icon-elf\" pi-icon-shape=\"edit\" pi-icon-name=\"SearchEditClick\" class=\"edit-icon\" _nghost-snb-c28=\"\" title=\"\" tooltip=\"Search options\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"edit\"></coral-icon><!----><!----></app-icon><div _ngcontent-snb-c129=\"\" buttonsview=\"\" class=\"extended-buttons-list\"><app-saved-searches-drop-list _ngcontent-snb-c129=\"\" _nghost-snb-c128=\"\"><div _ngcontent-snb-c128=\"\" class=\"saved-searches-dropdown-list\"><app-dropdown-button _ngcontent-snb-c128=\"\" _nghost-snb-c127=\"\"><div _ngcontent-snb-c127=\"\" class=\"dropdown-button\" title=\"\" tooltip=\"\"><app-button _ngcontent-snb-c127=\"\" class=\"dropdown-icon-button merged\" _nghost-snb-c14=\"\"><coral-button _ngcontent-snb-c14=\"\" id=\"undefined\" title=\"\" tooltip=\"\" tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\" textpos=\"after\" icon=\"save\" empty=\"\"><app-icon _ngcontent-snb-c127=\"\" class=\"merged-dropdown-icon\" _nghost-snb-c28="
+        },
+        {
+          "tag": "DIV",
+          "className": "filter-list",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "Date: 01-Feb-2026 To 02-May-2026;  Pages: <= 23;  Countries/Regions: United States of America; 1 Contributors: Morgan Stanley; 1 Save Criteria Set (Subscription) Preview Date: 01-Feb-2026 To 02-May-2026, Pages: <= 23, Countries/Regions (1), Contributors (1)Name Set as Default  Also set as an Alert Notification Style Alert History  Toast  Popup  Eikon Messenger  Sound  Default  Email Expires On OK  Cancel  SEARCH  CLEAR",
+          "outerHTML": "<div _ngcontent-snb-c125=\"\" class=\"filter-list\"><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Date:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> 01-Feb-2026 To 02-May-2026</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-separator\">;</span></span><app-pill _ngcontent-snb-c125=\"\" class=\"hidden\"><coral-pill tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\">  </coral-pill><!----><!----></app-pill><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Pages:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> &lt;= 23</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-separator\">;</span></span><app-pill _ngcontent-snb-c125=\"\" class=\"hidden\"><coral-pill tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\">  </coral-pill><!----><!----></app-pill><!----><"
+        },
+        {
+          "tag": "DIV",
+          "className": "filters-label",
+          "id": "",
+          "role": "",
+          "ariaLabel": "",
+          "text": "Date: 01-Feb-2026 To 02-May-2026;  Pages: <= 23;  Countries/Regions: United States of America; 1 Contributors: Morgan Stanley; 1 Save Criteria Set (Subscription) Preview Date: 01-Feb-2026 To 02-May-2026, Pages: <= 23, Countries/Regions (1), Contributors (1)Name Set as Default  Also set as an Alert Notification Style Alert History  Toast  Popup  Eikon Messenger  Sound  Default  Email Expires On OK  Cancel  SEARCH  CLEAR",
+          "outerHTML": "<div _ngcontent-snb-c125=\"\" class=\"filters-label\"><app-icon _ngcontent-snb-c125=\"\" class=\"filter-icon\" _nghost-snb-c28=\"\"><coral-icon _ngcontent-snb-c28=\"\" icon=\"filter\"></coral-icon><!----><!----></app-icon><div _ngcontent-snb-c125=\"\" class=\"filter-list\"><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Date:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> 01-Feb-2026 To 02-May-2026</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-separator\">;</span></span><app-pill _ngcontent-snb-c125=\"\" class=\"hidden\"><coral-pill tabindex=\"0\" aria-disabled=\"false\" aria-readonly=\"false\">  </coral-pill><!----><!----></app-pill><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item\"><span _ngcontent-snb-c125=\"\" class=\"filter-item-title\">Pages:</span><!----><!----><span _ngcontent-snb-c125=\"\" class=\"filter-item-text\"> &lt;= 23</span><!----><!----><!----><!----><span _ngcontent-snb-c125=\"\" cl"
+        }
+      ]
+    }
+  ]
+}
