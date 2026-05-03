@@ -37,8 +37,26 @@ export async function openBrowserSession(config: LsegConfig, logger: RunLogger):
 }
 
 function findWorkspacePage(pages: Page[]): Page | undefined {
-  return pages.find((page) => {
-    const url = page.url();
-    return url.includes("workspace.refinitiv.com") || url.includes("research-next") || url.includes("BatchSavePrint");
-  });
+  const ranked = pages
+    .map((page) => ({ page, rank: workspacePageRank(page.url(), page.frames().map((frame) => frame.url())) }))
+    .filter((candidate) => candidate.rank > 0)
+    .sort((a, b) => b.rank - a.rank);
+  return ranked[0]?.page;
+}
+
+export function workspacePageRank(pageUrl: string, frameUrls: string[] = []): number {
+  const urls = [pageUrl, ...frameUrls];
+  if (urls.some((url) => /\/Apps\/research-next\/2\./i.test(url))) {
+    return 4;
+  }
+  if (/\/web\/Apps\/research-next\//i.test(pageUrl)) {
+    return 3;
+  }
+  if (/BatchSavePrint/i.test(pageUrl)) {
+    return 0;
+  }
+  if (pageUrl.includes("workspace.refinitiv.com")) {
+    return 1;
+  }
+  return 0;
 }

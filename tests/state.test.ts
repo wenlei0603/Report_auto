@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classifyUrl } from "../src/browser/state.js";
 import { isQueryModeReady } from "../src/browser/filters.js";
+import { workspacePageRank } from "../src/browser/session.js";
 
 describe("URL state classifier", () => {
   it("detects BatchSavePrint drift", () => {
@@ -13,6 +14,18 @@ describe("URL state classifier", () => {
 
   it("returns null when URL alone is not enough", () => {
     expect(classifyUrl("https://workspace.refinitiv.com/Apps/research-next/2.22.3/#/")).toBeNull();
+  });
+});
+
+describe("workspace page selection", () => {
+  it("prefers the real Research Next tab over BatchSavePrint feedback pages", () => {
+    expect(workspacePageRank("https://workspace.refinitiv.com/web/Apps/BatchSavePrint/?ws=true")).toBe(0);
+    expect(workspacePageRank("https://workspace.refinitiv.com/web/Apps/research-next/?st=OAPermID")).toBeGreaterThan(0);
+    expect(
+      workspacePageRank("https://workspace.refinitiv.com/web/Apps/research-next/?st=OAPermID", [
+        "https://workspace.refinitiv.com/Apps/research-next/2.22.3/#/?st=OAPermID"
+      ])
+    ).toBeGreaterThan(workspacePageRank("https://workspace.refinitiv.com/web/Apps/research-next/?st=OAPermID"));
   });
 });
 
