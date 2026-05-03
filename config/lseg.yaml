@@ -5,7 +5,7 @@ mapping_csv: "output/task_file_mapping.csv"
 status_log_jsonl: "logs/task_status.jsonl"
 progress_csv: "output/task_progress.csv"
 run_log_jsonl: "logs/run_log.jsonl"
-daily_page_limit: 500
+daily_page_limit: 700
 max_downloads: 1
 cdp_endpoint: "http://127.0.0.1:9222"
 
@@ -19,6 +19,7 @@ filters:
   contributor: "Morgan Stanley"
   country: "USA"
   industry: "none"
+  max_pages: 23
 
 timeouts:
   default_ms: 20000

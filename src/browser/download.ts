@@ -8,7 +8,7 @@ import { inspectPdf } from "../io/pdf.js";
 import { sanitizeFilename } from "../utils/filename.js";
 import { sha256File } from "../utils/hash.js";
 import { clickFirst } from "./locators.js";
-import { eventWindowForTask } from "./results.js";
+import { extractVisibleResultRows, reviewResultRows, selectResultRowsByIndex } from "./results.js";
 import type { AutomationScope } from "./types.js";
 
 export interface BulkDownloadResult {
@@ -17,6 +17,12 @@ export interface BulkDownloadResult {
   pages: number;
   artifacts: DownloadArtifact[];
   mappingRecords: MappingRecord[];
+  error: string;
+}
+
+interface RowSelectionResult {
+  ok: boolean;
+  status: "no_downloadable_report" | "special_company_case";
   error: string;
 }
 
@@ -31,8 +37,8 @@ export async function executeBulkDownload(input: {
   await disconnectInteractionLink(scope, page);
 
   const selected = await ensureEligibleRowsSelected(scope, config, page, task);
-  if (!selected) {
-    return failed("no_downloadable_report", "no_eligible_rows_selected_for_event_window");
+  if (!selected.ok) {
+    return failed(selected.status, selected.error);
   }
   await page.waitForTimeout(250);
 
@@ -157,186 +163,58 @@ async function ensureEligibleRowsSelected(
   config: LsegConfig,
   page: Page,
   task: RequestTask
-): Promise<boolean> {
-  const selectedVisibleRows = await selectVisibleRowsInEventWindow(scope, task);
-  if (selectedVisibleRows.selected > 0) {
-    return true;
+): Promise<RowSelectionResult> {
+  const rows = await extractVisibleResultRows(scope);
+  if (rows.length > 0) {
+    const review = reviewResultRows(rows, {
+      company: task.company,
+      ticker: task.ticker,
+      ccDate: task.ccDate,
+      dateFrom: task.dateFrom,
+      dateTo: task.dateTo,
+      contributor: config.filters.contributor,
+      maxPages: config.filters.max_pages
+    });
+
+    if (review.autoSelectRowIndexes.length === 0) {
+      const status = review.humanReviewRowIndexes.length > 0 ? "special_company_case" : "no_downloadable_report";
+      const prefix = status === "special_company_case" ? "human_review_required" : "no_auto_selectable_rows";
+      return {
+        ok: false,
+        status,
+        error: `${prefix}:${compactResultReviewReason(review)}`
+      };
+    }
+
+    const selected = await selectResultRowsByIndex(scope, review.autoSelectRowIndexes);
+    if (selected.selected > 0) {
+      return { ok: true, status: "no_downloadable_report", error: "" };
+    }
+    return {
+      ok: false,
+      status: "no_downloadable_report",
+      error: `row_checkbox_selection_not_confirmed:requested=${selected.requested};selected=${selected.selected};inspectable=${selected.inspectableRows}`
+    };
   }
-  if (selectedVisibleRows.inspectableRows > 0) {
-    return false;
-  }
-  return ensureRowsSelected(scope, config, page);
+
+  const fallbackSelected = await ensureRowsSelected(scope, config, page);
+  return fallbackSelected
+    ? { ok: true, status: "no_downloadable_report", error: "" }
+    : { ok: false, status: "no_downloadable_report", error: "select_all_fallback_failed_no_rows_selected" };
 }
 
-async function selectVisibleRowsInEventWindow(
-  scope: AutomationScope,
-  task: RequestTask
-): Promise<{ inspectableRows: number; selected: number }> {
-  const eventWindow = eventWindowForTask({ ccDate: task.ccDate, dateFrom: task.dateFrom, dateTo: task.dateTo });
-  return scope
-    .evaluate(async ({ from, to, ticker }) => {
-      const visible = (el: Element) => {
-        const style = getComputedStyle(el);
-        const rect = el.getBoundingClientRect();
-        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 2 && rect.height > 2;
-      };
-      const parseDate = (text: string) => {
-        const match = text.match(/\b(\d{1,2})-([A-Za-z]{3})-(\d{4})\b/);
-        if (!match) {
-          return "";
-        }
-        const months = new Map([
-          ["jan", "01"],
-          ["feb", "02"],
-          ["mar", "03"],
-          ["apr", "04"],
-          ["may", "05"],
-          ["jun", "06"],
-          ["jul", "07"],
-          ["aug", "08"],
-          ["sep", "09"],
-          ["oct", "10"],
-          ["nov", "11"],
-          ["dec", "12"]
-        ]);
-        const month = months.get(match[2]!.toLowerCase());
-        return month ? `${match[3]}-${month}-${String(match[1]).padStart(2, "0")}` : "";
-      };
-      const emeraldSelection = await selectEmeraldGridRows();
-      if (emeraldSelection.inspectableRows > 0) {
-        return emeraldSelection;
-      }
-
-      const rows = [...document.querySelectorAll("tbody tr, [role='rowgroup'] [role='row']")].filter(visible);
-      let inspectableRows = 0;
-      let selected = 0;
-      for (const row of rows) {
-        const rowDateIso = extractRowDateIso(row);
-        if (!rowDateIso) {
-          continue;
-        }
-        inspectableRows += 1;
-        const checkbox = row.querySelector<HTMLElement>("coral-checkbox, input[type='checkbox'], [role='checkbox']");
-        if (!checkbox) {
-          continue;
-        }
-        const isInWindow = rowDateIso >= from && rowDateIso <= to;
-        const checked = isChecked(checkbox);
-        if (isInWindow && !checked) {
-          clickCheckbox(checkbox);
-        } else if (!isInWindow && checked) {
-          clickCheckbox(checkbox);
-        }
-      }
-      await waitForCheckboxState();
-      selected = rows.filter((row) => {
-        const rowDateIso = extractRowDateIso(row);
-        const checkbox = row.querySelector<HTMLElement>("coral-checkbox, input[type='checkbox'], [role='checkbox']");
-        return Boolean(rowDateIso && rowDateIso >= from && rowDateIso <= to && isChecked(checkbox));
-      }).length;
-      return { inspectableRows, selected };
-
-      async function selectEmeraldGridRows(): Promise<{ inspectableRows: number; selected: number }> {
-        const root = document.querySelector("app-main-grid emerald-grid")?.shadowRoot;
-        if (!root) {
-          return { inspectableRows: 0, selected: 0 };
-        }
-        const clean = (el: Element | undefined) => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
-        const headers = [...root.querySelectorAll(".tr-lg.title .grid-pane.columns .column")].map((el) =>
-          clean(el).toLowerCase()
-        );
-        const columns = [...root.querySelectorAll(".tr-vlg.content .grid-pane.columns .column")];
-        const dateIndex = headers.findIndex((header) => header === "date" || /^date\b/.test(header));
-        const tickerIndex = headers.findIndex((header) => header.includes("ticker"));
-        if (dateIndex < 0 || columns.length === 0) {
-          return { inspectableRows: 0, selected: 0 };
-        }
-
-        const valuesByColumn = columns.map((column) =>
-          [...column.children]
-            .filter((child) => child.classList.contains("cell"))
-            .map((cell) => clean(cell))
-        );
-        const dateValues = valuesByColumn[dateIndex] ?? [];
-        const tickerValues = tickerIndex >= 0 ? valuesByColumn[tickerIndex] ?? [] : [];
-        const checkboxes = [...root.querySelectorAll<HTMLElement>("coral-checkbox.selected-doc-checkbox")];
-        const tickerPattern = ticker.trim()
-          ? new RegExp(`\\b${escapeRegex(ticker.trim())}(?:[\\.\\^][A-Z0-9]+)?\\b`, "i")
-          : null;
-
-        let inspectableRows = 0;
-        const eligibleRows: number[] = [];
-        for (let rowIndex = 0; rowIndex < dateValues.length; rowIndex += 1) {
-          const rowDateIso = parseDate(dateValues[rowIndex] ?? "");
-          if (!rowDateIso) {
-            continue;
-          }
-          inspectableRows += 1;
-          const checkbox = checkboxes[rowIndex];
-          if (!checkbox) {
-            continue;
-          }
-          const tickerText = tickerValues[rowIndex] ?? "";
-          const tickerMatches = !tickerPattern || tickerPattern.test(tickerText);
-          const isInWindow = rowDateIso >= from && rowDateIso <= to && tickerMatches;
-          const checked = isChecked(checkbox);
-          if (isInWindow && !checked) {
-            clickCheckbox(checkbox);
-          } else if (!isInWindow && checked) {
-            clickCheckbox(checkbox);
-          }
-          if (isInWindow) {
-            eligibleRows.push(rowIndex);
-          }
-        }
-        await waitForCheckboxState();
-        const selected = eligibleRows.filter((rowIndex) => isChecked(checkboxes[rowIndex])).length;
-        return { inspectableRows, selected };
-      }
-
-      function extractRowDateIso(row: Element): string {
-        const table = row.closest("table");
-        if (table) {
-          const headers = [...table.querySelectorAll("th, [role='columnheader']")].map((el) =>
-            (el.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase()
-          );
-          const dateIndex = headers.findIndex((header) => header === "date" || /^date\b/.test(header));
-          if (dateIndex >= 0) {
-            const cells = [...row.querySelectorAll("td, [role='cell']")];
-            const value = cells[dateIndex]?.textContent ?? "";
-            const parsed = parseDate(value);
-            if (parsed) {
-              return parsed;
-            }
-          }
-        }
-        return parseDate((row.textContent ?? "").replace(/\s+/g, " ").trim());
-      }
-      function escapeRegex(input: string): string {
-        return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      }
-      function isChecked(checkbox: Element | undefined | null): boolean {
-        if (!checkbox) {
-          return false;
-        }
-        return (
-          checkbox.hasAttribute("checked") ||
-          (checkbox as HTMLInputElement).checked === true ||
-          checkbox.getAttribute("aria-checked") === "true"
-        );
-      }
-      function clickCheckbox(checkbox: HTMLElement): void {
-        const shadowTarget =
-          checkbox.shadowRoot?.querySelector<HTMLElement>("[part='check']") ??
-          checkbox.shadowRoot?.querySelector<HTMLElement>("[part='container']") ??
-          checkbox.shadowRoot?.querySelector<HTMLElement>("div");
-        (shadowTarget ?? checkbox).click();
-      }
-      function waitForCheckboxState(): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, 250));
-      }
-    }, { ...eventWindow, ticker: task.ticker })
-    .catch(() => ({ inspectableRows: 0, selected: 0 }));
+function compactResultReviewReason(review: ReturnType<typeof reviewResultRows>): string {
+  const reasonCounts = new Map<string, number>();
+  for (const row of review.reviews) {
+    for (const reason of row.review.reasons) {
+      reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
+    }
+  }
+  const reasons = [...reasonCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => `${reason}=${count}`)
+    .join(",");
+  return `inspectable=${review.inspectableRows};auto=${review.autoSelectRowIndexes.length};human=${review.humanReviewRowIndexes.length};rejected=${review.rejectedRowIndexes.length};reasons=${reasons}`;
 }
 
 async function snapshotPdfCandidates(config: LsegConfig, taskId: string): Promise<Map<string, number>> {

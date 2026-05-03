@@ -32,6 +32,14 @@ export interface ResultRowReview {
   reasons: string[];
 }
 
+export interface ResultRowsReview {
+  inspectableRows: number;
+  autoSelectRowIndexes: number[];
+  humanReviewRowIndexes: number[];
+  rejectedRowIndexes: number[];
+  reviews: Array<ResultRowSnapshot & { review: ResultRowReview }>;
+}
+
 const GENERIC_COMPANY_WORDS = new Set(["co", "inc", "corp", "ltd", "company", "plc", "nv", "sa", "ag", "se"]);
 
 function dateTextIso(dateText: string): string {
@@ -62,19 +70,59 @@ function isAmbiguousTicker(tickerText: string, tickerExtraCount: number): boolea
   return /^n\/?a$/i.test(t);
 }
 
+function companyTokens(company: string): string[] {
+  return company
+    .toLowerCase()
+    .replace(/[.,]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !GENERIC_COMPANY_WORDS.has(token));
+}
+
+function companyMatches(rowCompany: string, taskCompany: string): boolean {
+  const rowText = rowCompany.toLowerCase();
+  const tokens = companyTokens(taskCompany);
+  return tokens.length > 0 && tokens.some((token) => rowText.includes(token));
+}
+
+function tickerMatches(rowTicker: string, taskTicker: string): boolean {
+  const tickerNorm = taskTicker.trim();
+  if (!tickerNorm) {
+    return true;
+  }
+  const pattern = new RegExp(`\\b${escapeRegExp(tickerNorm)}(?:[\\.\\^][a-z0-9]+)?\\b`, "i");
+  return pattern.test(rowTicker);
+}
+
 export function evaluateResultRow(
   row: ResultRowSnapshot,
   task: ResultReviewTask
 ): ResultRowReview {
   const reasons: string[] = [];
 
-  const rowDateIso = dateTextIso(row.dateText);
-  const eventWindow = eventWindowForTask(task);
-  if (compareIsoDates(rowDateIso, task.dateFrom) < 0 || compareIsoDates(rowDateIso, task.dateTo) > 0) {
-    reasons.push("date_out_of_range");
+  let rowDateIso = "";
+  try {
+    rowDateIso = dateTextIso(row.dateText);
+  } catch {
+    reasons.push("date_unparseable");
   }
-  if (compareIsoDates(rowDateIso, eventWindow.from) < 0 || compareIsoDates(rowDateIso, eventWindow.to) > 0) {
-    reasons.push("date_out_of_event_window");
+  if (rowDateIso) {
+    const eventWindow = eventWindowForTask(task);
+    if (compareIsoDates(rowDateIso, task.dateFrom) < 0 || compareIsoDates(rowDateIso, task.dateTo) > 0) {
+      reasons.push("date_out_of_range");
+    }
+    if (compareIsoDates(rowDateIso, eventWindow.from) < 0 || compareIsoDates(rowDateIso, eventWindow.to) > 0) {
+      reasons.push("date_out_of_event_window");
+    }
+  }
+
+  let availableIso = "";
+  try {
+    availableIso = dateTextIso(row.availableText);
+  } catch {
+    reasons.push("available_unparseable");
+  }
+  if (availableIso && (compareIsoDates(availableIso, task.dateFrom) < 0 || compareIsoDates(availableIso, task.dateTo) > 0)) {
+    reasons.push("available_out_of_range");
   }
 
   const norm = (s: string) => s.trim().toLowerCase();
@@ -85,6 +133,16 @@ export function evaluateResultRow(
   const pages = Number.parseInt(row.pagesText, 10);
   if (Number.isFinite(pages) && pages > task.maxPages) {
     reasons.push("pages_exceed_limit");
+  }
+  if (!Number.isFinite(pages)) {
+    reasons.push("pages_unparseable");
+  }
+
+  if (!companyMatches(row.companyName, task.company)) {
+    reasons.push("company_mismatch");
+  }
+  if (!isAmbiguousTicker(row.tickerText, row.tickerExtraCount) && !tickerMatches(row.tickerText, task.ticker)) {
+    reasons.push("ticker_mismatch");
   }
 
   const eligible = !reasons.length;
@@ -110,11 +168,143 @@ export function evaluateResultRow(
   };
 }
 
+export function reviewResultRows(rows: ResultRowSnapshot[], task: ResultReviewTask): ResultRowsReview {
+  const reviews = rows.map((row) => ({ ...row, review: evaluateResultRow(row, task) }));
+  return {
+    inspectableRows: rows.length,
+    autoSelectRowIndexes: reviews.filter((row) => row.review.autoSelect).map((row) => row.rowIndex),
+    humanReviewRowIndexes: reviews.filter((row) => row.review.eligible && row.review.needsHumanReview).map((row) => row.rowIndex),
+    rejectedRowIndexes: reviews.filter((row) => !row.review.eligible).map((row) => row.rowIndex),
+    reviews
+  };
+}
+
 export function eventWindowForTask(task: Pick<ResultReviewTask, "ccDate" | "dateFrom" | "dateTo">): { from: string; to: string } {
   if (!task.ccDate) {
     return { from: task.dateFrom, to: task.dateTo };
   }
   return { from: task.ccDate, to: addDaysIso(task.ccDate, 7) };
+}
+
+export async function extractVisibleResultRows(scope: AutomationScope): Promise<ResultRowSnapshot[]> {
+  return scope
+    .evaluate(() => {
+      const clean = (el: Element | undefined) => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+      const stripExtraCount = (text: string) => text.replace(/\+\d+\s*$/, "").trim();
+      const extraCount = (text: string) => {
+        const match = text.match(/\+(\d+)\s*$/);
+        return match ? Number.parseInt(match[1]!, 10) : 0;
+      };
+
+      for (const grid of [...document.querySelectorAll("app-main-grid emerald-grid, emerald-grid")]) {
+        const root = grid.shadowRoot;
+        if (!root) {
+          continue;
+        }
+        const headers = [...root.querySelectorAll(".tr-lg.title .grid-pane.columns .column")].map((el) =>
+          clean(el).toLowerCase()
+        );
+        const columns = [...root.querySelectorAll(".tr-vlg.content .grid-pane.columns .column")];
+        const indexes = {
+          date: headers.findIndex((header) => header === "date" || /^date\b/.test(header)),
+          available: headers.findIndex((header) => header.includes("available")),
+          company: headers.findIndex((header) => header.includes("company")),
+          ticker: headers.findIndex((header) => header.includes("ticker")),
+          title: headers.findIndex((header) => header.includes("title")),
+          pages: headers.findIndex((header) => header === "pages" || /^pages\b/.test(header)),
+          contributor: headers.findIndex((header) => header.includes("contributor"))
+        };
+        if (indexes.date < 0 || indexes.company < 0 || indexes.title < 0 || indexes.pages < 0 || indexes.contributor < 0) {
+          continue;
+        }
+
+        const valuesByColumn = columns.map((column) =>
+          [...column.children]
+            .filter((child) => child.classList.contains("cell"))
+            .map((cell) => clean(cell))
+        );
+        const rowCount = Math.max(0, ...valuesByColumn.map((values) => values.length));
+        const rows: ResultRowSnapshot[] = [];
+        for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+          const companyText = valuesByColumn[indexes.company]?.[rowIndex] ?? "";
+          const tickerText = indexes.ticker >= 0 ? valuesByColumn[indexes.ticker]?.[rowIndex] ?? "" : "";
+          const row: ResultRowSnapshot = {
+            rowIndex,
+            dateText: valuesByColumn[indexes.date]?.[rowIndex] ?? "",
+            availableText: indexes.available >= 0 ? valuesByColumn[indexes.available]?.[rowIndex] ?? "" : "",
+            companyName: stripExtraCount(companyText),
+            companyExtraCount: extraCount(companyText),
+            tickerText: stripExtraCount(tickerText),
+            tickerExtraCount: extraCount(tickerText),
+            titleText: valuesByColumn[indexes.title]?.[rowIndex] ?? "",
+            pagesText: valuesByColumn[indexes.pages]?.[rowIndex] ?? "",
+            contributorText: valuesByColumn[indexes.contributor]?.[rowIndex] ?? ""
+          };
+          if (row.dateText || row.titleText || row.companyName) {
+            rows.push(row);
+          }
+        }
+        if (rows.length > 0) {
+          return rows;
+        }
+      }
+      return [];
+    })
+    .catch(() => []);
+}
+
+export async function selectResultRowsByIndex(
+  scope: AutomationScope,
+  rowIndexes: number[]
+): Promise<{ requested: number; selected: number; inspectableRows: number }> {
+  return scope
+    .evaluate(async (requestedRows) => {
+      const requested = new Set(requestedRows);
+      for (const grid of [...document.querySelectorAll("app-main-grid emerald-grid, emerald-grid")]) {
+        const root = grid.shadowRoot;
+        if (!root) {
+          continue;
+        }
+        const checkboxes = [...root.querySelectorAll<HTMLElement>("coral-checkbox.selected-doc-checkbox")];
+        if (checkboxes.length === 0) {
+          continue;
+        }
+        for (let rowIndex = 0; rowIndex < checkboxes.length; rowIndex += 1) {
+          const checkbox = checkboxes[rowIndex];
+          if (!checkbox) {
+            continue;
+          }
+          const shouldBeChecked = requested.has(rowIndex);
+          const checked = isChecked(checkbox);
+          if (shouldBeChecked !== checked) {
+            clickCheckbox(checkbox);
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const selected = requestedRows.filter((rowIndex) => isChecked(checkboxes[rowIndex])).length;
+        return { requested: requestedRows.length, selected, inspectableRows: checkboxes.length };
+      }
+      return { requested: requestedRows.length, selected: 0, inspectableRows: 0 };
+
+      function isChecked(checkbox: Element | undefined | null): boolean {
+        if (!checkbox) {
+          return false;
+        }
+        return (
+          checkbox.hasAttribute("checked") ||
+          (checkbox as HTMLInputElement).checked === true ||
+          checkbox.getAttribute("aria-checked") === "true"
+        );
+      }
+      function clickCheckbox(checkbox: HTMLElement): void {
+        const shadowTarget =
+          checkbox.shadowRoot?.querySelector<HTMLElement>("[part='check']") ??
+          checkbox.shadowRoot?.querySelector<HTMLElement>("[part='container']") ??
+          checkbox.shadowRoot?.querySelector<HTMLElement>("div");
+        (shadowTarget ?? checkbox).click();
+      }
+    }, rowIndexes)
+    .catch(() => ({ requested: rowIndexes.length, selected: 0, inspectableRows: 0 }));
 }
 
 export interface CompanyListReview {

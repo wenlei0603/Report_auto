@@ -39,7 +39,8 @@ const ConfigSchema = z.object({
   filters: z.object({
     contributor: z.string(),
     country: z.string(),
-    industry: z.string()
+    industry: z.string(),
+    max_pages: z.number().int().positive()
   }),
   timeouts: z.object({
     default_ms: z.number().int().positive(),
