@@ -37,7 +37,7 @@ describe("record store", () => {
     expect(await readFile(path.join(tmpDir, "progress.csv"), "utf8")).toContain("T0001");
   });
 
-  it("uses the latest task status when deciding completed tasks and daily pages", async () => {
+  it("uses the latest task status when deciding completed tasks without erasing platform page usage", async () => {
     const store = new RecordStore(
       path.join(tmpDir, "mapping.csv"),
       path.join(tmpDir, "status.jsonl"),
@@ -61,7 +61,34 @@ describe("record store", () => {
     });
 
     expect(await store.doneTaskIds()).toEqual(new Set());
-    expect(await store.dailyPages()).toBe(0);
+    expect(await store.dailyPages()).toBe(12);
+  });
+
+  it("counts selected pages once download has been submitted to the platform", async () => {
+    const store = new RecordStore(
+      path.join(tmpDir, "mapping.csv"),
+      path.join(tmpDir, "status.jsonl"),
+      path.join(tmpDir, "progress.csv"),
+      500
+    );
+    await store.initialize();
+    await store.writeStatus({
+      task: taskFixture,
+      status: "download_started",
+      pages: 22,
+      note: "selected_pages_reserved",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+    await store.writeStatus({
+      task: taskFixture,
+      status: "task_failed",
+      pages: 0,
+      note: "browser detached after platform submission",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+
+    expect(await store.doneTaskIds()).toEqual(new Set());
+    expect(await store.dailyPages()).toBe(22);
   });
 });
 

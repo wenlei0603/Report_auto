@@ -45,6 +45,8 @@ const TERMINAL_STATUSES = new Set<FinalTaskStatus>([
   "special_company_case"
 ]);
 
+const PAGE_ACCOUNTING_STATUSES = new Set<FinalTaskStatus>(["download_started", "downloaded"]);
+
 export class RecordStore {
   constructor(
     private readonly mappingCsv: string,
@@ -68,10 +70,7 @@ export class RecordStore {
 
   async dailyPages(runDate = todayIso()): Promise<number> {
     const records = await readJsonl<TaskStatusRecord>(this.statusJsonl);
-    return [...latestRecordByTask(records).values()]
-      .filter((record) => record.runDate === runDate)
-      .filter((record) => record.status === "downloaded")
-      .reduce((sum, record) => sum + Math.max(0, record.pages || 0), 0);
+    return dailyPageUsage(records, runDate);
   }
 
   async writeStatus(input: {
@@ -83,7 +82,7 @@ export class RecordStore {
     artifacts?: DownloadArtifact[];
   }): Promise<TaskStatusRecord> {
     const runDate = todayIso();
-    const dailyTotalPages = (await this.dailyPages(runDate)) + (input.status === "downloaded" ? input.pages : 0);
+    const existingRecords = await readJsonl<TaskStatusRecord>(this.statusJsonl);
     const now = timestampIso();
     const record: TaskStatusRecord = {
       ts: now,
@@ -95,12 +94,13 @@ export class RecordStore {
       dateTo: input.task.dateTo,
       status: input.status,
       pages: input.pages,
-      dailyTotalPages,
+      dailyTotalPages: 0,
       dayPageLimit: this.dayPageLimit,
       note: input.note,
       pageUrl: input.pageUrl,
       artifacts: input.artifacts ?? []
     };
+    record.dailyTotalPages = dailyPageUsage([...existingRecords, record], runDate);
     await appendJsonl(this.statusJsonl, record);
     await appendCsvRow(this.progressCsv, [
       record.timestamp,
@@ -148,6 +148,21 @@ export class RecordStore {
       throw error;
     }
   }
+}
+
+function dailyPageUsage(records: TaskStatusRecord[], runDate: string): number {
+  return [...latestAccountingRecordByTask(records, runDate).values()].reduce((sum, record) => sum + Math.max(0, record.pages || 0), 0);
+}
+
+function latestAccountingRecordByTask(records: TaskStatusRecord[], runDate: string): Map<string, TaskStatusRecord> {
+  const latest = new Map<string, TaskStatusRecord>();
+  for (const record of records) {
+    if (record.runDate !== runDate || !PAGE_ACCOUNTING_STATUSES.has(record.status)) {
+      continue;
+    }
+    latest.set(record.taskId, record);
+  }
+  return latest;
 }
 
 function latestRecordByTask(records: TaskStatusRecord[]): Map<string, TaskStatusRecord> {

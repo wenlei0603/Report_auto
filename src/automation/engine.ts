@@ -17,6 +17,7 @@ export interface RunOptions {
   maxTasks?: number;
   maxDownloads?: number;
   startFromTask?: string;
+  includeDone?: boolean;
 }
 
 export interface InspectResult {
@@ -239,7 +240,32 @@ async function runOneTask(input: {
     }
 
     const downloadSourceUrl = page.url();
-    const download = await executeBulkDownload({ page, scope, config, task, estimatedPages });
+    let reservedPages = 0;
+    const download = await executeBulkDownload({
+      page,
+      scope,
+      config,
+      task,
+      estimatedPages,
+      reserveSelectedPages: async (rowSelection, selectedPages) => {
+        if (!pageGuard.canSpend(selectedPages)) {
+          return {
+            ok: false,
+            error: `selected_pages_exceed_daily_limit:selected=${selectedPages};remaining=${pageGuard.remaining};limit=${config.daily_page_limit}`
+          };
+        }
+        pageGuard.spend(selectedPages);
+        reservedPages = selectedPages;
+        await store.writeStatus({
+          task,
+          status: "download_started",
+          pages: selectedPages,
+          note: `selected_pages_reserved:selected=${selectedPages};rows=${rowSelection.selected};remaining_after=${pageGuard.remaining}`,
+          pageUrl: downloadSourceUrl
+        });
+        return { ok: true, error: "" };
+      }
+    });
     if (download.rowSelection) {
       await logger.event(download.rowSelection.selected > 0 ? "INFO" : "WARN", "Download row selection", {
         taskId: task.taskId,
@@ -248,12 +274,24 @@ async function runOneTask(input: {
     }
     if (!download.ok || (config.behavior.require_download_artifacts && download.artifacts.length === 0)) {
       const failureStatus = download.status === "downloaded" ? "task_failed" : download.status;
+      if (failureStatus === "page_limit") {
+        await store.writeStatus({
+          task,
+          status: "page_limit",
+          pages: 0,
+          note: download.error || "selected_pages_exceed_daily_limit",
+          pageUrl: downloadSourceUrl
+        });
+        return "page_limit";
+      }
       await writeFailure(store, task, failureStatus, download.error || "download_failed_without_artifact", downloadSourceUrl);
       return failureStatus;
     }
 
     const pages = download.artifacts.reduce((sum, artifact) => sum + artifact.pages, 0) || download.pages;
-    pageGuard.spend(pages);
+    if (pages > reservedPages) {
+      pageGuard.spend(pages - reservedPages);
+    }
     for (const mapping of download.mappingRecords) {
       await store.appendMapping(mapping);
     }
@@ -273,8 +311,8 @@ async function runOneTask(input: {
   }
 }
 
-function selectPendingTasks(tasks: RequestTask[], doneIds: Set<string>, options: RunOptions): RequestTask[] {
-  let selected = tasks.filter((task) => !doneIds.has(task.taskId));
+export function selectPendingTasks(tasks: RequestTask[], doneIds: Set<string>, options: RunOptions): RequestTask[] {
+  let selected = options.includeDone === true ? tasks : tasks.filter((task) => !doneIds.has(task.taskId));
   if (options.startFromTask) {
     const index = selected.findIndex((task) => task.taskId === options.startFromTask);
     selected = index >= 0 ? selected.slice(index) : selected;

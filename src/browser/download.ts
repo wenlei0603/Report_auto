@@ -14,7 +14,7 @@ import type { AutomationScope } from "./types.js";
 
 export interface BulkDownloadResult {
   ok: boolean;
-  status: "downloaded" | "no_downloadable_report" | "task_failed" | "special_company_case";
+  status: "downloaded" | "no_downloadable_report" | "task_failed" | "special_company_case" | "page_limit";
   pages: number;
   artifacts: DownloadArtifact[];
   mappingRecords: MappingRecord[];
@@ -70,6 +70,7 @@ export async function executeBulkDownload(input: {
   config: LsegConfig;
   task: RequestTask;
   estimatedPages: number;
+  reserveSelectedPages?: (rowSelection: DownloadRowSelection, selectedPages: number) => Promise<{ ok: boolean; error: string }>;
 }): Promise<BulkDownloadResult> {
   const { page, scope, config, task, estimatedPages } = input;
   await disconnectInteractionLink(scope, page);
@@ -77,6 +78,13 @@ export async function executeBulkDownload(input: {
   const selected = await ensureEligibleRowsSelected(scope, config, page, task);
   if (!selected.ok) {
     return failed(selected.status, selected.error, selected.rowSelection);
+  }
+  const pagesToReserve = Math.max(1, selectedRowPages(selected.rowSelection) || estimatedPages);
+  if (input.reserveSelectedPages && selected.rowSelection) {
+    const reservation = await input.reserveSelectedPages(selected.rowSelection, pagesToReserve);
+    if (!reservation.ok) {
+      return failed("page_limit", reservation.error, selected.rowSelection, pagesToReserve);
+    }
   }
   await page.waitForTimeout(250);
 
@@ -363,6 +371,15 @@ export function expectedNativePdfCount(rowSelection: DownloadRowSelection | unde
   return Math.max(1, rowSelection?.selected ?? rowSelection?.requested ?? 1);
 }
 
+export function selectedRowPages(rowSelection: DownloadRowSelection | undefined): number {
+  return (rowSelection?.selectedRows ?? []).reduce((sum, row) => sum + parsePageCount(row.pages), 0);
+}
+
+function parsePageCount(value: string): number {
+  const match = String(value ?? "").match(/\b(\d+)\b/);
+  return match ? Math.max(0, Number.parseInt(match[1] ?? "0", 10)) : 0;
+}
+
 export function isActiveDownloadTempFileName(fileName: string): boolean {
   const lower = fileName.toLowerCase();
   return lower.endsWith(".crdownload") || lower.endsWith(".download") || lower.endsWith(".tmp");
@@ -630,14 +647,15 @@ async function uniquePath(filePath: string): Promise<string> {
 }
 
 function failed(
-  status: "no_downloadable_report" | "task_failed" | "special_company_case",
+  status: "no_downloadable_report" | "task_failed" | "special_company_case" | "page_limit",
   error: string,
-  rowSelection?: DownloadRowSelection
+  rowSelection?: DownloadRowSelection,
+  pages = 0
 ): BulkDownloadResult {
   return {
     ok: false,
     status,
-    pages: 0,
+    pages,
     artifacts: [],
     mappingRecords: [],
     error,

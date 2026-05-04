@@ -17,6 +17,7 @@ program
   .option("--max-tasks <count>", "maximum tasks to process", parsePositiveInt)
   .option("--max-downloads <count>", "maximum successful downloads", parseNonNegativeInt)
   .option("--start-from-task <taskId>", "start from a specific task id, for example T0100")
+  .option("--include-done", "include tasks that already have terminal status records", false)
   .action(async (options) => {
     const rootOptions = program.opts<{ config: string }>();
     const config = await loadConfig(rootOptions.config);
@@ -24,7 +25,8 @@ program
       dryRun: Boolean(options.dryRun),
       maxTasks: options.maxTasks,
       maxDownloads: options.maxDownloads,
-      startFromTask: options.startFromTask
+      startFromTask: options.startFromTask,
+      includeDone: Boolean(options.includeDone)
     });
   });
 

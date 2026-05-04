@@ -5,6 +5,7 @@ import {
   isBatchSavePrintAppUrl,
   isPdfLandingHandoff,
   nativePdfWaitTimeoutMs,
+  selectedRowPages,
   shouldWaitBeforeReconnect
 } from "../src/browser/download.js";
 
@@ -40,5 +41,14 @@ describe("download handoff timing", () => {
   it("detects active browser download temp files", () => {
     expect(isActiveDownloadTempFileName("report.pdf.crdownload")).toBe(true);
     expect(isActiveDownloadTempFileName("report.pdf")).toBe(false);
+  });
+
+  it("sums selected result row pages before entering the download flow", () => {
+    expect(
+      selectedRowPages({
+        selected: 3,
+        selectedRows: [{ pages: "14" }, { pages: "8 pgs" }, { pages: "N/A" }]
+      } as never)
+    ).toBe(22);
   });
 });

@@ -16,6 +16,7 @@ export type FinalTaskStatus =
   | "no_rows"
   | "no_downloadable_report"
   | "filter_not_applied"
+  | "download_started"
   | "page_limit"
   | "max_downloads"
   | "task_failed"
