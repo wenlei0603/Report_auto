@@ -5,7 +5,10 @@ playwright-report/
 test-results/
 .superpowers/
 .env
+everything-claude-code-ssh/
+Pastproject/
 logs/*.jsonl
 output/downloads/
+output/debug/
 output/*.csv
 *.tsbuildinfo

@@ -1,9 +1,0 @@
-model = "gpt-5.4"
-model_reasoning_effort = "high"
-sandbox_mode = "workspace-write"
-
-developer_instructions = """
-Own the test surface for this project.
-Write failing tests first, keep them tightly scoped to the behavior under discussion, and expand coverage across unit, integration, and Playwright layers only after the red state is proven.
-Favor deterministic fixtures and explicit assertions over broad happy-path smoke tests.
-"""

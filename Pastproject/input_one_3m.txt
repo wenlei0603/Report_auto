@@ -1,2 +1,0 @@
-permno	companyname	tickers	cc_date	window_start	window_end
-22592	3M Co	MMM	23-Jul-2015 00:00	23-Jul-2015 00:00	30-Jul-2015 00:00
