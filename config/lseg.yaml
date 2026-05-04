@@ -51,6 +51,8 @@ selectors:
     - "button:has-text('Search')"
     - "button:has-text('Apply')"
   modify_query_buttons:
+    - "app-button.edit-filters-button coral-button[icon='filter']"
+    - "app-button[pi-button-name='FilterIconClick'] coral-button[icon='filter']"
     - "app-filters-label app-icon.edit-icon"
     - "app-filters-label .edit-icon"
     - "app-filters-label coral-icon[icon='edit']"
@@ -61,7 +63,6 @@ selectors:
     - "app-button.edit-filters-button"
     - "app-button[tooltip='Search options']"
     - "app-button[pi-button-name='FilterIconClick']"
-    - "app-button.edit-filters-button coral-button[icon='filter']"
     - "button:has-text('MODIFY QUERY CONDITIONS')"
     - "button:has-text('MODIFY SEARCH CRITERIA')"
     - "a:has-text('MODIFY QUERY CONDITIONS')"

@@ -19,6 +19,12 @@ export interface CompanyCandidate {
   matchType: string;
 }
 
+export interface ContributorCandidate {
+  label: string;
+  value: string;
+  matchType: string;
+}
+
 const COMPANY_SUFFIX_WORDS = new Set(["co", "inc", "corp", "corporation", "ltd", "limited", "plc", "group", "sa", "ag"]);
 
 export interface SuggestionSnapshot {
@@ -86,6 +92,37 @@ export function chooseCompanyCandidate(
     .sort((a, b) => b.score - a.score);
 
   return candidates.find((candidate) => candidate.score > 0) ?? null;
+}
+
+export function chooseContributorCandidate(
+  items: Array<{ label?: string; value?: string }>,
+  contributor: string
+): ContributorCandidate | null {
+  const requested = normalizeText(contributor);
+  if (!requested) {
+    return null;
+  }
+
+  const candidates = items
+    .filter((item) => item?.value)
+    .map((item) => {
+      const label = normalizeText(String(item.label ?? ""));
+      const exact = label === requested;
+      const contains = label.includes(requested);
+      return {
+        label: String(item.label ?? ""),
+        value: String(item.value ?? ""),
+        score: exact ? 100 : contains ? 50 : 0,
+        matchType: exact ? "exact_label" : contains ? "label_contains" : "none"
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const selected = candidates.find((candidate) => candidate.score > 0);
+  if (!selected) {
+    return null;
+  }
+  return { label: selected.label, value: selected.value, matchType: selected.matchType };
 }
 
 export async function closePopupDialogs(scope: AutomationScope): Promise<void> {
@@ -165,6 +202,8 @@ async function reopenSearchCriteriaPanel(scope: AutomationScope, config: LsegCon
   for (const target of targets) {
     const clickedFallback = await target.evaluate(() => {
       const selectors = [
+        "app-button.edit-filters-button coral-button[icon='filter']",
+        "app-button[pi-button-name='FilterIconClick'] coral-button[icon='filter']",
         "app-filters-label app-icon.edit-icon",
         "app-filters-label .edit-icon",
         "app-filters-label coral-icon[icon='edit']",
@@ -175,7 +214,6 @@ async function reopenSearchCriteriaPanel(scope: AutomationScope, config: LsegCon
         "app-button.edit-filters-button",
         "app-button[tooltip='Search options']",
         "app-button[pi-button-name='FilterIconClick']",
-        "app-button.edit-filters-button coral-button[icon='filter']",
         "coral-icon[icon='edit']"
       ];
 
@@ -257,12 +295,10 @@ async function hasExpandedFilterPanelVisible(scope: AutomationScope): Promise<bo
 
 export async function applyGlobalFilters(scope: AutomationScope, config: LsegConfig): Promise<FilterResult> {
   await closePopupDialogs(scope);
+  const contributorResult = await setContributor(scope, config.filters.contributor);
   const details = await scope.evaluate(
-    async ({ contributor, country, industry }) => {
-      const setContributor = async (name: string) => {
-        const el = document.querySelector<any>("app-contributors-filter emerald-multi-select");
-        if (!el) return { ok: false, reason: "no_contributor_component" };
-
+    ({ country, industry, contributorResult }) => {
+      const clearContributorPreferred = () => {
         const includeButton = document.querySelector<HTMLElement>("app-contributors-filter coral-radio-button");
         includeButton?.click();
 
@@ -271,28 +307,6 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
           const checked = cb.hasAttribute("checked") || cb.checked === true || cb.getAttribute("aria-checked") === "true";
           if (label.includes("preferred") && checked) cb.click();
         }
-
-        el.values = [];
-        el.value = "";
-        el.query = name;
-        el.opened = true;
-        await new Promise((resolve) => setTimeout(resolve, 700));
-
-        const pool = [...(el._resolvedData ?? []), ...(el._data ?? []), ...(el.data ?? [])];
-        const chosen =
-          pool.find((item: any) => String(item?.label ?? "").trim().toLowerCase() === name.trim().toLowerCase()) ??
-          pool.find((item: any) => String(item?.label ?? "").trim().toLowerCase().includes(name.trim().toLowerCase()));
-        if (!chosen?.value) {
-          return { ok: false, reason: "contributor_not_found", labels: pool.slice(0, 8).map((item: any) => item?.label ?? "") };
-        }
-
-        el.values = [String(chosen.value)];
-        el.value = String(chosen.value);
-        el.opened = false;
-        el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-        el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-        el.dispatchEvent(new CustomEvent("confirm", { bubbles: true, composed: true }));
-        return { ok: true, selectedLabels: el.selectedLabels ?? [], values: el.values ?? [] };
       };
 
       const setCountry = () => {
@@ -332,7 +346,7 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
         return { ok: true, selectedLabels: el.selectedLabels ?? [], values: el.values ?? [] };
       };
 
-      const contributorResult = await setContributor(contributor);
+      clearContributorPreferred();
       const countryResult = setCountry();
       const industryResult = clearIndustry();
       const preferredStillChecked = [...document.querySelectorAll<any>("coral-checkbox")].filter((cb) => {
@@ -343,7 +357,7 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
 
       return { contributorResult, countryResult, industryResult, preferredStillChecked };
     },
-    config.filters
+    { country: config.filters.country, industry: config.filters.industry, contributorResult }
   );
 
   const ok =
@@ -353,6 +367,195 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
     Number((details as any).preferredStillChecked ?? 0) === 0;
 
   return { ok, reason: ok ? "global_filters_validated" : "global_filters_failed", details: details as Record<string, unknown> };
+}
+
+async function setContributor(scope: AutomationScope, contributor: string): Promise<Record<string, unknown>> {
+  const page = owningPage(scope);
+  const input = scope
+    .locator("app-contributors-filter app-multi-select emerald-multi-select input[placeholder*='Contributors' i]")
+    .first();
+  const beforeSignature = await scope.evaluate(() => {
+    const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+    if (!el) return "";
+    const data = [...(el._resolvedData ?? []), ...(el._data ?? []), ...(el.data ?? [])];
+    return data
+      .filter((item: any) => item?.value)
+      .slice(0, 10)
+      .map((item: any) => `${String(item.label ?? "").trim()}::${String(item.value ?? "").trim()}`)
+      .join("|");
+  });
+
+  try {
+    await scope.evaluate(() => {
+      const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+      if (!el) return;
+      el.values = [];
+      el.value = "";
+      el.query = "";
+      el.opened = true;
+    });
+    await input.click({ timeout: 3000 });
+    await input.press("Control+A", { timeout: 3000 }).catch(() => undefined);
+    await input.press("Backspace", { timeout: 3000 }).catch(() => undefined);
+    await input.type(contributor, { delay: 70, timeout: 6000 });
+    await scope.evaluate((typedQuery) => {
+      const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+      if (!el) return;
+      el.query = typedQuery;
+      el.opened = true;
+    }, contributor);
+  } catch {
+    return { ok: false, reason: "contributor_input_fill_failed", candidates: [] };
+  }
+
+  let pool: Array<{ label: string; value: string }> = [];
+  let snapshot: SuggestionSnapshot = {
+    filtered: [],
+    signature: "",
+    componentQuery: "",
+    inputValue: ""
+  };
+  let lastSignature = "";
+  let stableCycles = 0;
+  const deadline = Date.now() + 6000;
+  while (Date.now() < deadline) {
+    snapshot = await scope.evaluate((typedQuery) => {
+      const normalized = String(typedQuery ?? "").trim().toLowerCase();
+      const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+      if (!el) {
+        return { filtered: [], signature: "", componentQuery: "", inputValue: "" };
+      }
+      const data = [...(el._resolvedData ?? []), ...(el._data ?? []), ...(el.data ?? [])];
+      const filtered = data
+        .filter((item: any) => item?.value)
+        .map((item: any) => ({ label: String(item.label ?? ""), value: String(item.value ?? "") }))
+        .filter((item: { label: string; value: string }) => {
+          if (!normalized) {
+            return true;
+          }
+          const label = item.label.toLowerCase();
+          const value = item.value.toLowerCase();
+          return label.includes(normalized) || value.includes(normalized);
+        });
+      const signature = filtered
+        .slice(0, 10)
+        .map((item: { label: string; value: string }) => `${item.label.trim()}::${item.value.trim()}`)
+        .join("|");
+      const inputEl = el.shadowRoot?.querySelector("input") as HTMLInputElement | null;
+      return {
+        filtered,
+        signature,
+        componentQuery: String(el.query ?? ""),
+        inputValue: String(inputEl?.value ?? "")
+      };
+    }, contributor);
+
+    pool = snapshot.filtered;
+    if (snapshot.signature && snapshot.signature === lastSignature) {
+      stableCycles += 1;
+    } else if (snapshot.signature) {
+      stableCycles = 1;
+      lastSignature = snapshot.signature;
+    } else {
+      stableCycles = 0;
+    }
+
+    if (isContributorSuggestionSnapshotReady(snapshot, contributor, beforeSignature, stableCycles)) {
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+
+  const selected = chooseContributorCandidate(pool, contributor);
+  if (!selected) {
+    return { ok: false, reason: "contributor_not_found", labels: pool.slice(0, 8).map((item) => item.label), snapshot };
+  }
+
+  return applyContributorValueWithVerification(scope, selected.value, selected.label).then((state) => ({
+    ...state,
+    selected,
+    candidates: pool.slice(0, 10)
+  }));
+}
+
+export function isContributorSuggestionSnapshotReady(
+  snapshot: SuggestionSnapshot,
+  contributor: string,
+  beforeSignature: string,
+  stableCycles: number
+): boolean {
+  if (snapshot.filtered.length === 0 || stableCycles < 2) {
+    return false;
+  }
+  const normalizedQuery = normalizeText(contributor);
+  const querySeen =
+    normalizeText(snapshot.componentQuery).includes(normalizedQuery) || normalizeText(snapshot.inputValue).includes(normalizedQuery);
+  if (!querySeen) {
+    return false;
+  }
+  const hasRequestedContributor = chooseContributorCandidate(snapshot.filtered, contributor) !== null;
+  if (!hasRequestedContributor) {
+    return false;
+  }
+  return snapshot.signature !== beforeSignature || hasRequestedContributor;
+}
+
+async function applyContributorValueWithVerification(
+  scope: AutomationScope,
+  selectedValue: string,
+  selectedLabel: string
+): Promise<Record<string, unknown>> {
+  const labelNorm = normalizeText(selectedLabel);
+  const valueNorm = normalizeText(selectedValue);
+
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const state = await scope.evaluate(
+      async ({ value, label }) => {
+        const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+        if (!el) return { ok: false, reason: "no_contributor_component", selectedLabels: [], values: [], applied: false };
+
+        el.values = [String(value)];
+        el.value = String(value);
+        el.opened = false;
+        el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        el.dispatchEvent(new CustomEvent("confirm", { bubbles: true, composed: true }));
+        await new Promise((resolve) => setTimeout(resolve, 260));
+
+        const values = Array.isArray(el.values) ? el.values.map((x: unknown) => String(x)) : [];
+        const selectedLabels = Array.isArray(el.selectedLabels) ? el.selectedLabels.map((x: unknown) => String(x)) : [];
+        const hasValue = values.some((item: string) => String(item).trim().toLowerCase() === String(value).trim().toLowerCase());
+        const hasLabel = selectedLabels.some((item: string) =>
+          String(item).trim().toLowerCase().includes(String(label).trim().toLowerCase())
+        );
+        const applied = hasValue || hasLabel;
+        return {
+          ok: applied,
+          selectedLabels,
+          values,
+          applied
+        };
+      },
+      { value: selectedValue, label: selectedLabel }
+    );
+
+    const values = ((state.values as string[] | undefined) ?? []).map((item) => normalizeText(item));
+    const labels = ((state.selectedLabels as string[] | undefined) ?? []).map((item) => normalizeText(item));
+    const hasValue = values.includes(valueNorm);
+    const hasLabel = labelNorm ? labels.some((item) => item.includes(labelNorm)) : false;
+    if (hasValue || hasLabel) {
+      return { ...state, ok: true, applied: true, applyAttempt: attempt };
+    }
+    await owningPage(scope).waitForTimeout(220);
+  }
+
+  return {
+    ok: false,
+    applied: false,
+    reason: "contributor_selection_not_materialized",
+    selectedLabels: [],
+    values: []
+  };
 }
 
 export async function applyTaskFilters(scope: AutomationScope, config: LsegConfig, task: RequestTask): Promise<TaskFilterResult> {

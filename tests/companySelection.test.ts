@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { chooseCompanyCandidate, isSuggestionSnapshotReady } from "../src/browser/filters.js";
+import {
+  chooseCompanyCandidate,
+  chooseContributorCandidate,
+  isContributorSuggestionSnapshotReady,
+  isSuggestionSnapshotReady
+} from "../src/browser/filters.js";
 
 describe("company candidate selection", () => {
   it("prefers exact ticker matches over suffix matches", () => {
@@ -77,6 +82,66 @@ describe("company suggestion readiness", () => {
         "mmm",
         "",
         1
+      )
+    ).toBe(false);
+  });
+});
+
+describe("contributor candidate selection", () => {
+  it("prefers the exact contributor label over related research groups", () => {
+    const selected = chooseContributorCandidate(
+      [
+        { label: "Morgan Stanley Fixed Income Research", value: "112604678849" },
+        { label: "Morgan Stanley", value: "112604678803" }
+      ],
+      "Morgan Stanley"
+    );
+
+    expect(selected).toEqual({ label: "Morgan Stanley", value: "112604678803", matchType: "exact_label" });
+  });
+
+  it("rejects stale suggestions from a previous contributor query", () => {
+    const selected = chooseContributorCandidate(
+      [
+        { label: "Morningstar, Inc.", value: "100" },
+        { label: "Morningstar, Inc.", value: "101" }
+      ],
+      "Morgan Stanley"
+    );
+
+    expect(selected).toBeNull();
+  });
+});
+
+describe("contributor suggestion readiness", () => {
+  it("accepts stable exact-match suggestions even when the query was already reflected before polling", () => {
+    expect(
+      isContributorSuggestionSnapshotReady(
+        {
+          filtered: [{ label: "Morgan Stanley", value: "112604678803" }],
+          signature: "Morgan Stanley::112604678803",
+          componentQuery: "Morgan Stanley",
+          inputValue: "Morgan Stanley"
+        },
+        "Morgan Stanley",
+        "Morgan Stanley::112604678803",
+        2
+      )
+    ).toBe(true);
+  });
+
+  it("rejects stable stale suggestions that do not include the requested contributor", () => {
+    expect(
+      isContributorSuggestionSnapshotReady(
+        {
+          filtered: [{ label: "Morningstar, Inc.", value: "100" }],
+          signature: "Morningstar, Inc.::100",
+          componentQuery: "Morgan Stanley",
+          inputValue: "Morgan Stanley"
+        },
+        "Morgan Stanley",
+        "Morningstar, Inc.::100",
+        2
       )
     ).toBe(false);
   });

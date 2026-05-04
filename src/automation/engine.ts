@@ -158,6 +158,10 @@ async function runOneTask(input: {
         await writeFailure(store, task, "filter_not_applied", globalResult.reason, page.url());
         return "filter_not_applied";
       }
+      if (!(await ensureQueryMode(scope, config))) {
+        await writeFailure(store, task, "filter_not_applied", "query_mode_not_available_after_global_filters", page.url());
+        return "filter_not_applied";
+      }
     }
 
     scope = getResearchScope(page);
