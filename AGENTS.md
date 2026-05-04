@@ -1,177 +1,141 @@
-# Everything Claude Code (ECC) - Agent Instructions
+# AGENTS.md
 
-This is a production-ready AI coding plugin providing 48 specialized agents, 182 skills, 68 commands, and automated hook workflows for software development.
+Project-specific instructions for AI coding agents working in this repository.
 
-Version: 2.0.0-rc.1
+## Project Identity
 
-## Project Focus
+This repository is the TypeScript + Playwright rewrite of an LSEG Research Next report downloader.
 
-This repository is for the LSEG Research Next downloader rewrite.
+The automation attaches to a browser session that the human user has already logged into manually. It does not bypass login, does not attack the site, and does not attempt to defeat platform controls. The core job is reliable research-data collection within the user's allowed daily page budget.
 
-- Primary implementation target: TypeScript + Playwright
-- Browser model: attach to a browser that the user has already logged into manually
-- Primary engineering goal: reliable browser control, state classification, download verification, and archival ownership
-- Existing Python automation and logs are reference material only; do not preserve Python structure unless it directly helps the TypeScript rewrite
-- Prefer evidence from live browser state, network events, and saved artifacts over assumptions about the UI
-- Treat `lseg_research_next_kb_2026-04-30.md` as the current project knowledge base
+## First 10 Minutes
 
-## Core Principles
+When a new AI agent starts from a fresh clone, do this first:
 
-1. Agent-First - Delegate to specialized agents for domain tasks
-2. Test-Driven - Write tests before implementation, 80%+ coverage required
-3. Security-First - Never compromise on security; validate all inputs
-4. Immutability - Always create new objects, never mutate existing ones
-5. Plan Before Execute - Plan complex features before writing code
+1. Read `README.md` for operator-facing setup and run commands.
+2. Read `workflow.md` for architecture, state machine, browser recovery, and implementation route.
+3. Read `lseg_research_next_kb_2026-04-30.md` for current Research Next UI findings.
+4. Inspect `config/lseg.yaml`, especially local paths, CDP endpoint, page limits, and download limits.
+5. Run static verification before changing code:
 
-## Available Agents
-
-| Agent | Purpose | When to Use |
-|-------|---------|-------------|
-| planner | Implementation planning | Complex features, refactoring |
-| architect | System design and scalability | Architectural decisions |
-| tdd-guide | Test-driven development | New features, bug fixes |
-| code-reviewer | Code quality and maintainability | After writing/modifying code |
-| security-reviewer | Vulnerability detection | Before commits, sensitive code |
-| build-error-resolver | Fix build/type errors | When build fails |
-| e2e-runner | End-to-end Playwright testing | Critical user flows |
-| refactor-cleaner | Dead code cleanup | Code maintenance |
-| doc-updater | Documentation and codemaps | Updating docs |
-| cpp-reviewer | C/C++ code review | C and C++ projects |
-| cpp-build-resolver | C/C++ build errors | C and C++ build failures |
-| docs-lookup | Documentation lookup via Context7 | API/docs questions |
-| go-reviewer | Go code review | Go projects |
-| go-build-resolver | Go build errors | Go build failures |
-| kotlin-reviewer | Kotlin code review | Kotlin/Android/KMP projects |
-| kotlin-build-resolver | Kotlin/Gradle build errors | Kotlin build failures |
-| database-reviewer | PostgreSQL/Supabase specialist | Schema design, query optimization |
-| python-reviewer | Python code review | Python projects |
-| java-reviewer | Java and Spring Boot code review | Java/Spring Boot projects |
-| java-build-resolver | Java/Maven/Gradle build errors | Java build failures |
-| loop-operator | Autonomous loop execution | Run loops safely, monitor stalls, intervene |
-| harness-optimizer | Harness config tuning | Reliability, cost, throughput |
-| rust-reviewer | Rust code review | Rust projects |
-| rust-build-resolver | Rust build errors | Rust build failures |
-| pytorch-build-resolver | PyTorch runtime/CUDA/training errors | PyTorch build/training failures |
-| typescript-reviewer | TypeScript/JavaScript code review | TypeScript/JavaScript projects |
-
-## Agent Orchestration
-
-Use agents proactively without user prompt:
-- Complex feature requests -> planner
-- Code just written/modified -> code-reviewer
-- Bug fix or new feature -> tdd-guide
-- Architectural decision -> architect
-- Security-sensitive code -> security-reviewer
-- Autonomous loops / loop monitoring -> loop-operator
-- Harness config reliability and cost -> harness-optimizer
-
-Use parallel execution for independent operations - launch multiple agents simultaneously.
-
-## Security Guidelines
-
-Before ANY commit:
-- No hardcoded secrets (API keys, passwords, tokens)
-- All user inputs validated
-- SQL injection prevention (parameterized queries)
-- XSS prevention (sanitized HTML)
-- CSRF protection enabled
-- Authentication/authorization verified
-- Rate limiting on all endpoints
-- Error messages don't leak sensitive data
-
-Secret management: NEVER hardcode secrets. Use environment variables or a secret manager. Validate required secrets at startup. Rotate any exposed secrets immediately.
-
-If security issue found: STOP -> use security-reviewer agent -> fix CRITICAL issues -> rotate exposed secrets -> review codebase for similar issues.
-
-## Coding Style
-
-Immutability (CRITICAL): Always create new objects, never mutate. Return new copies with changes applied.
-
-File organization: Many small files over few large ones. 200-400 lines typical, 800 max. Organize by feature/domain, not by type. High cohesion, low coupling.
-
-Error handling: Handle errors at every level. Provide user-friendly messages in UI code. Log detailed context server-side. Never silently swallow errors.
-
-Input validation: Validate all user input at system boundaries. Use schema-based validation. Fail fast with clear messages. Never trust external data.
-
-Code quality checklist:
-- Functions small (<50 lines), files focused (<800 lines)
-- No deep nesting (>4 levels)
-- Proper error handling, no hardcoded values
-- Readable, well-named identifiers
-
-## Testing Requirements
-
-Minimum coverage: 80%
-
-Test types (all required):
-1. Unit tests - Individual functions, utilities, components
-2. Integration tests - API endpoints, database operations
-3. E2E tests - Critical user flows
-
-TDD workflow (mandatory):
-1. Write test first (RED) - test should FAIL
-2. Write minimal implementation (GREEN) - test should PASS
-3. Refactor (IMPROVE) - verify coverage 80%+
-
-Troubleshoot failures: check test isolation -> verify mocks -> fix implementation (not tests, unless tests are wrong).
-
-## Development Workflow
-
-1. Plan - Use planner agent, identify dependencies and risks, break into phases
-2. TDD - Use tdd-guide agent, write tests first, implement, refactor
-3. Review - Use code-reviewer agent immediately, address CRITICAL/HIGH issues
-4. Capture knowledge in the right place
-   - Personal debugging notes, preferences, and temporary context -> auto memory
-   - Team/project knowledge (architecture decisions, API changes, runbooks) -> the project's existing docs structure
-   - If the current task already produces the relevant docs or code comments, do not duplicate the same information elsewhere
-   - If there is no obvious project doc location, ask before creating a new top-level file
-5. Commit - Conventional commits format, comprehensive PR summaries
-
-## Workflow Surface Policy
-
-- `skills/` is the canonical workflow surface.
-- New workflow contributions should land in `skills/` first.
-- `commands/` is a legacy slash-entry compatibility surface and should only be added or updated when a shim is still required for migration or cross-harness parity.
-
-## Git Workflow
-
-Commit format: `<type>: <description>` - Types: feat, fix, refactor, docs, test, chore, perf, ci
-
-PR workflow: Analyze full commit history -> draft comprehensive summary -> include test plan -> push with `-u` flag.
-
-## Architecture Patterns
-
-API response format: Consistent envelope with success indicator, data payload, error message, and pagination metadata.
-
-Repository pattern: Encapsulate data access behind standard interface (findAll, findById, create, update, delete). Business logic depends on abstract interface, not storage mechanism.
-
-Skeleton projects: Search for battle-tested templates, evaluate with parallel agents (security, extensibility, relevance), clone best match, iterate within proven structure.
-
-## Performance
-
-Context management: Avoid last 20% of context window for large refactoring and multi-file features. Lower-sensitivity tasks (single edits, docs, simple fixes) tolerate higher utilization.
-
-Build troubleshooting: Use build-error-resolver agent -> analyze errors -> fix incrementally -> verify after each fix.
-
-## Project Structure
-
-```text
-agents/          - 48 specialized subagents
-skills/          - 182 workflow skills and domain knowledge
-commands/        - 68 slash commands
-hooks/           - Trigger-based automations
-rules/           - Always-follow guidelines (common + per-language)
-scripts/         - Cross-platform Node.js utilities
-mcp-configs/     - 14 MCP server configurations
-tests/           - Test suite
+```powershell
+npm install
+npm run typecheck
+npm run lint
+npm test
+npm run build
 ```
 
-`commands/` remains in the repo for compatibility, but the long-term direction is skills-first.
+If dependencies are already installed, do not reinstall unless needed.
 
-## Success Metrics
+## Runtime Model
 
-- All tests pass with 80%+ coverage
-- No security vulnerabilities
-- Code is readable and maintainable
-- Performance is acceptable
-- User requirements are met
+- Primary language: TypeScript.
+- Browser automation: Playwright over Chrome DevTools Protocol.
+- Login model: manual login by the user, then attach to `http://127.0.0.1:9222`.
+- Browser launcher: `npm run browser:start`.
+- Inspect command: `npm run automation:inspect`.
+- Dry run command: `npm run automation:dry-run -- --max-tasks 5`.
+- Conservative live run: `npm run dev -- run --max-tasks 1 --max-downloads 1`.
+
+Do not start a long live run unless the user explicitly asks for it and confirms the browser is logged in.
+
+## Core Architecture
+
+- `src/cli.ts`: command-line entrypoint and run options.
+- `src/config.ts`: YAML config validation.
+- `src/automation/engine.ts`: task loop, state transitions, page-limit stop behavior.
+- `src/browser/session.ts`: CDP connection lifecycle.
+- `src/browser/scope.ts`: correct Research Next page/frame selection.
+- `src/browser/state.ts`: UI state classification.
+- `src/browser/filters.ts`: query/filter panel control.
+- `src/browser/results.ts`: result-grid extraction and eligibility classification.
+- `src/browser/download.ts`: checkbox selection, batch download, PDF completion verification.
+- `src/domain/pageGuard.ts`: daily page-budget accounting.
+- `src/domain/tasks.ts`: input task parsing.
+- `src/io/records.ts`: JSONL/CSV persistence and resume state.
+- `tests/`: unit tests for queueing, page accounting, records, parsing, and browser helper logic.
+
+## Browser Rules
+
+The correct working surface is the original Research Next app page, not the temporary `Batch Service Print Service` page.
+
+Important UI facts:
+
+- Reopen collapsed filters through the `Search options` pencil/filter button.
+- The reliable selector for that button is currently `app-button.edit-filters-button coral-button[icon='filter']`.
+- Clicking `Search` can collapse the filter panel.
+- Date-range controls may not expand unless the filter panel has been reopened through Search options.
+- Result rows live in an `emerald-grid` shadow-DOM grid, not a normal HTML table.
+- A batch download may open or focus a temporary Batch Service Print page. After all expected PDFs are complete, reconnect to the Research Next page before the next task.
+
+Prefer evidence from live browser state, network/download events, logs, and saved PDFs over assumptions about the UI.
+
+## Page-Limit Rules
+
+Daily page-budget protection is a hard requirement.
+
+- `daily_page_limit` in `config/lseg.yaml` is the configured budget.
+- Page usage counts both `download_started` and `downloaded` task records.
+- Selected report pages are reserved before download starts.
+- If the next selected batch would exceed the remaining budget, record `page_limit`, do not select rows, do not download, and stop the run.
+- Do not change this behavior to "wait until PDFs land" before accounting. That was a known failure mode for multi-PDF batches.
+
+## Download Rules
+
+- Select all eligible reports for a task, not just the first eligible row.
+- Eligibility must consider company, date range, contributor, page count, and ticker classification.
+- Strict ticker matches and company/date matches with incomplete or unavailable ticker data should both be downloadable when requested, but must be distinguished in logs for later local archival.
+- Wait for all expected PDFs in a batch before advancing to the next task.
+- Do not treat the first observed PDF as proof the batch is complete.
+
+## Logs And Outputs
+
+Primary runtime artifacts:
+
+- `logs/run_log.jsonl`: runtime events and breadcrumbs.
+- `logs/task_status.jsonl`: task statuses, selected reports, page accounting, and artifacts.
+- `output/task_progress.csv`: flattened progress.
+- `output/task_file_mapping.csv`: task-to-file mapping.
+- `output/downloads/by_task/Txxxx/`: verified task PDFs.
+
+Generated logs and downloads are runtime data. Do not commit them unless the user explicitly asks for a reproducible fixture or documentation example.
+
+## Development Rules
+
+- Preserve the TypeScript rewrite structure. Historical Python automation is reference material only.
+- Keep browser-specific behavior in `src/browser/`, task/domain policy in `src/domain/`, orchestration in `src/automation/`, and persistence in `src/io/`.
+- Add or update tests for page accounting, task state transitions, result classification, or selector behavior when those areas change.
+- Prefer small, focused modules over large rewrites.
+- Do not hardcode local secrets, credentials, or account-specific tokens.
+- Do not modify `config/lseg.yaml` for a user's local path unless explicitly requested.
+- Use conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
+
+## Verification Expectations
+
+Before claiming a code change is complete, run:
+
+```powershell
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+For documentation-only changes, at minimum run:
+
+```powershell
+git diff --check
+```
+
+Live behavior still requires an authenticated browser session and human confirmation that the correct LSEG page is open.
+
+## Safe AI Handoff Summary
+
+If you need to brief the next AI agent, include:
+
+- Current branch and latest commit.
+- Whether the browser is open and logged in.
+- Current page-limit budget and recent `task_status.jsonl` state.
+- Last task ID attempted and whether it stopped because of `page_limit`, `max_downloads`, `task_failed`, or user interruption.
+- Commands already run and their results.
