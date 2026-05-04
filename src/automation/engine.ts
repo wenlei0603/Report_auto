@@ -119,6 +119,10 @@ export async function runAutomation(config: LsegConfig, options: RunOptions): Pr
       } else if (status !== "filter_not_applied") {
         globalApplied = true;
       }
+      if (shouldStopRunAfterStatus(status)) {
+        await logger.event("INFO", "Stopping run after terminal guard status", { status });
+        break;
+      }
     }
   } finally {
     await session.browser.close().catch(() => undefined);
@@ -321,6 +325,10 @@ export function selectPendingTasks(tasks: RequestTask[], doneIds: Set<string>, o
     selected = selected.slice(0, options.maxTasks);
   }
   return selected;
+}
+
+export function shouldStopRunAfterStatus(status: FinalTaskStatus): boolean {
+  return status === "page_limit" || status === "max_downloads";
 }
 
 function effectiveMaxDownloads(config: LsegConfig, options: RunOptions): number {

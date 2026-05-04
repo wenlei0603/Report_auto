@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectPendingTasks } from "../src/automation/engine.js";
+import { selectPendingTasks, shouldStopRunAfterStatus } from "../src/automation/engine.js";
 import type { RequestTask } from "../src/domain/types.js";
 
 describe("automation task queue selection", () => {
@@ -17,6 +17,13 @@ describe("automation task queue selection", () => {
     });
 
     expect(selected.map((task) => task.taskId)).toEqual(["T0001", "T0002", "T0003"]);
+  });
+});
+
+describe("automation run stop conditions", () => {
+  it("stops the run when the page guard reaches the daily limit", () => {
+    expect(shouldStopRunAfterStatus("page_limit")).toBe(true);
+    expect(shouldStopRunAfterStatus("no_rows")).toBe(false);
   });
 });
 

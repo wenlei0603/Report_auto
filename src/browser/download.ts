@@ -24,7 +24,7 @@ export interface BulkDownloadResult {
 
 interface RowSelectionResult {
   ok: boolean;
-  status: "no_downloadable_report" | "special_company_case";
+  status: "no_downloadable_report" | "special_company_case" | "page_limit";
   error: string;
   rowSelection?: DownloadRowSelection | undefined;
 }
@@ -75,16 +75,9 @@ export async function executeBulkDownload(input: {
   const { page, scope, config, task, estimatedPages } = input;
   await disconnectInteractionLink(scope, page);
 
-  const selected = await ensureEligibleRowsSelected(scope, config, page, task);
+  const selected = await ensureEligibleRowsSelected(scope, config, page, task, input.reserveSelectedPages, estimatedPages);
   if (!selected.ok) {
-    return failed(selected.status, selected.error, selected.rowSelection);
-  }
-  const pagesToReserve = Math.max(1, selectedRowPages(selected.rowSelection) || estimatedPages);
-  if (input.reserveSelectedPages && selected.rowSelection) {
-    const reservation = await input.reserveSelectedPages(selected.rowSelection, pagesToReserve);
-    if (!reservation.ok) {
-      return failed("page_limit", reservation.error, selected.rowSelection, pagesToReserve);
-    }
+    return failed(selected.status, selected.error, selected.rowSelection, selectedRowPages(selected.rowSelection));
   }
   await page.waitForTimeout(250);
 
@@ -221,7 +214,9 @@ async function ensureEligibleRowsSelected(
   scope: AutomationScope,
   config: LsegConfig,
   page: Page,
-  task: RequestTask
+  task: RequestTask,
+  reserveSelectedPages: ((rowSelection: DownloadRowSelection, selectedPages: number) => Promise<{ ok: boolean; error: string }>) | undefined,
+  estimatedPages: number
 ): Promise<RowSelectionResult> {
   const rows = await extractVisibleResultRows(scope);
   if (rows.length > 0) {
@@ -244,6 +239,20 @@ async function ensureEligibleRowsSelected(
         error: `${prefix}:${compactResultReviewReason(review)}`,
         rowSelection: buildRowSelection(review, 0)
       };
+    }
+
+    const candidateSelection = buildRowSelection(review, 0);
+    const pagesToReserve = Math.max(1, selectedRowPages(candidateSelection) || estimatedPages);
+    if (reserveSelectedPages) {
+      const reservation = await reserveSelectedPages(candidateSelection, pagesToReserve);
+      if (!reservation.ok) {
+        return {
+          ok: false,
+          status: "page_limit",
+          error: reservation.error,
+          rowSelection: candidateSelection
+        };
+      }
     }
 
     const selected = await selectResultRowsByIndex(scope, review.autoSelectRowIndexes);
