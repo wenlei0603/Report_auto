@@ -106,6 +106,15 @@ export function normalizeAccounts(config: LsegConfig): LsegAccountConfig[] {
   return accounts;
 }
 
+export function configForAccount(config: LsegConfig, account: LsegAccountConfig): LsegConfig {
+  return {
+    ...config,
+    cdp_endpoint: account.cdp_endpoint,
+    daily_page_limit: account.daily_page_limit,
+    download_dir: account.download_dir
+  };
+}
+
 function assertUniqueAccounts(accounts: LsegAccountConfig[]): void {
   const ids = new Set<string>();
   const endpoints = new Set<string>();

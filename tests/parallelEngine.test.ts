@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { shouldWorkerContinueAfterStatus } from "../src/automation/parallelEngine.js";
+import { TaskQueue } from "../src/automation/taskQueue.js";
+import type { RequestTask } from "../src/domain/types.js";
 
 describe("parallel worker stop semantics", () => {
   test("page_limit stops only the current worker", () => {
@@ -14,3 +16,28 @@ describe("parallel worker stop semantics", () => {
     expect(shouldWorkerContinueAfterStatus("filter_not_applied")).toBe(true);
   });
 });
+
+test("leased task completion allows another account to continue after one worker stops", () => {
+  const queue = new TaskQueue([task("T0001"), task("T0002")]);
+
+  const first = queue.leaseNext("account_a")!;
+  queue.complete(first.taskId);
+  expect(shouldWorkerContinueAfterStatus("page_limit")).toBe(false);
+
+  const second = queue.leaseNext("account_b")!;
+  expect(second.taskId).toBe("T0002");
+});
+
+function task(taskId: string): RequestTask {
+  return {
+    taskId,
+    rowNumber: Number(taskId.replace(/\D/g, "")),
+    permno: taskId,
+    company: `Company ${taskId}`,
+    ticker: taskId,
+    ccDate: "01-Jan-2016",
+    dateFrom: "01-Jan-2016",
+    dateTo: "08-Jan-2016",
+    rawLine: ""
+  };
+}

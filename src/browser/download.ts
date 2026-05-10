@@ -69,6 +69,7 @@ export async function executeBulkDownload(input: {
   scope: AutomationScope;
   config: LsegConfig;
   task: RequestTask;
+  accountId?: string | undefined;
   estimatedPages: number;
   reserveSelectedPages?: (rowSelection: DownloadRowSelection, selectedPages: number) => Promise<{ ok: boolean; error: string }>;
 }): Promise<BulkDownloadResult> {
@@ -95,7 +96,7 @@ export async function executeBulkDownload(input: {
 
     const pdfBaseline = await snapshotPdfCandidates(config, task.taskId);
     const clickedSave = await waitAndClickSave(scope, config, page);
-    const detachedResult = await detachOnBatchSavePrint(page, config, task, estimatedPages, pdfBaseline, selected.rowSelection);
+    const detachedResult = await detachOnBatchSavePrint(page, config, task, input.accountId, estimatedPages, pdfBaseline, selected.rowSelection);
     if (detachedResult) {
       return detachedResult;
     }
@@ -129,6 +130,7 @@ export async function executeBulkDownload(input: {
       pages
     };
     const mapping: MappingRecord = {
+      ...(input.accountId ? { accountId: input.accountId } : {}),
       timestamp: timestampIso(),
       taskId: task.taskId,
       company: task.company,
@@ -173,6 +175,7 @@ async function detachOnBatchSavePrint(
   page: Page,
   config: LsegConfig,
   task: RequestTask,
+  accountId: string | undefined,
   estimatedPages: number,
   baseline: PdfLandingBaseline,
   rowSelection: DownloadRowSelection | undefined
@@ -203,7 +206,7 @@ async function detachOnBatchSavePrint(
           rowSelection
         );
       }
-      return buildNativeLandingResult(config, task, landed.paths, estimatedPages, rowSelection);
+      return buildNativeLandingResult(config, task, accountId, landed.paths, estimatedPages, rowSelection);
     }
     await page.waitForTimeout(250);
   }
@@ -454,6 +457,7 @@ function candidateDownloadDirectories(config: LsegConfig, taskId: string): strin
 async function buildNativeLandingResult(
   config: LsegConfig,
   task: RequestTask,
+  accountId: string | undefined,
   landedPaths: string[],
   estimatedPages: number,
   rowSelection: DownloadRowSelection | undefined
@@ -484,6 +488,7 @@ async function buildNativeLandingResult(
       pages
     });
     mappingRecords.push({
+      ...(accountId ? { accountId } : {}),
       timestamp: timestampIso(),
       taskId: task.taskId,
       company: task.company,

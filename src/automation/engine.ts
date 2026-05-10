@@ -144,15 +144,17 @@ export async function runOneTask(input: {
   task: RequestTask;
   pageGuard: PageGuard;
   page: Page;
+  accountId?: string | undefined;
   applyGlobalFilters: boolean;
 }): Promise<FinalTaskStatus> {
   const { config, logger, store, task, pageGuard } = input;
   const { page } = input;
+  const accountId = input.accountId;
   let scope = await waitForResearchScope(page, config, logger);
 
   try {
     if (!(await ensureQueryMode(scope, config))) {
-      await writeFailure(store, task, "filter_not_applied", "query_mode_not_available", page.url());
+      await writeFailure(store, task, "filter_not_applied", "query_mode_not_available", page.url(), accountId);
       return "filter_not_applied";
     }
 
@@ -160,11 +162,11 @@ export async function runOneTask(input: {
       const globalResult = await applyGlobalFilters(scope, config);
       await logger.event(globalResult.ok ? "INFO" : "WARN", "Global filter result", globalResult.details);
       if (!globalResult.ok) {
-        await writeFailure(store, task, "filter_not_applied", globalResult.reason, page.url());
+        await writeFailure(store, task, "filter_not_applied", globalResult.reason, page.url(), accountId);
         return "filter_not_applied";
       }
       if (!(await ensureQueryMode(scope, config))) {
-        await writeFailure(store, task, "filter_not_applied", "query_mode_not_available_after_global_filters", page.url());
+        await writeFailure(store, task, "filter_not_applied", "query_mode_not_available_after_global_filters", page.url(), accountId);
         return "filter_not_applied";
       }
     }
@@ -182,6 +184,7 @@ export async function runOneTask(input: {
     if (!taskResult.okCompany || !taskResult.okFrom || !taskResult.okTo) {
       if (taskResult.companyDetails.needsHumanReview === true) {
         await store.writeStatus({
+          accountId,
           task,
           status: "special_company_case",
           pages: 0,
@@ -190,7 +193,7 @@ export async function runOneTask(input: {
         });
         return "special_company_case";
       }
-      await writeFailure(store, task, "filter_not_applied", "task_filter_validation_failed", page.url());
+      await writeFailure(store, task, "filter_not_applied", "task_filter_validation_failed", page.url(), accountId);
       return "filter_not_applied";
     }
 
@@ -201,6 +204,7 @@ export async function runOneTask(input: {
     if (resultState.status === "no_results" || resultState.status === "no_rows") {
       const status = resultState.status;
       await store.writeStatus({
+        accountId,
         task,
         status,
         pages: 0,
@@ -211,7 +215,7 @@ export async function runOneTask(input: {
     }
 
     if (resultState.status !== "results" && resultState.status !== "document_info") {
-      await writeFailure(store, task, "task_failed", `unexpected_result_state:${resultState.status}`, page.url());
+      await writeFailure(store, task, "task_failed", `unexpected_result_state:${resultState.status}`, page.url(), accountId);
       return "task_failed";
     }
 
@@ -222,6 +226,7 @@ export async function runOneTask(input: {
     });
     if (!companyListReview.ok && companyListReview.needsHumanReview) {
       await store.writeStatus({
+        accountId,
         task,
         status: "special_company_case",
         pages: 0,
@@ -234,6 +239,7 @@ export async function runOneTask(input: {
     const estimatedPages = Math.max(1, resultState.estimatedPages);
     if (!pageGuard.canSpend(estimatedPages)) {
       await store.writeStatus({
+        accountId,
         task,
         status: "page_limit",
         pages: 0,
@@ -250,6 +256,7 @@ export async function runOneTask(input: {
       scope,
       config,
       task,
+      accountId,
       estimatedPages,
       reserveSelectedPages: async (rowSelection, selectedPages) => {
         if (!pageGuard.canSpend(selectedPages)) {
@@ -261,6 +268,7 @@ export async function runOneTask(input: {
         pageGuard.spend(selectedPages);
         reservedPages = selectedPages;
         await store.writeStatus({
+          accountId,
           task,
           status: "download_started",
           pages: selectedPages,
@@ -280,6 +288,7 @@ export async function runOneTask(input: {
       const failureStatus = download.status === "downloaded" ? "task_failed" : download.status;
       if (failureStatus === "page_limit") {
         await store.writeStatus({
+          accountId,
           task,
           status: "page_limit",
           pages: 0,
@@ -288,7 +297,7 @@ export async function runOneTask(input: {
         });
         return "page_limit";
       }
-      await writeFailure(store, task, failureStatus, download.error || "download_failed_without_artifact", downloadSourceUrl);
+      await writeFailure(store, task, failureStatus, download.error || "download_failed_without_artifact", downloadSourceUrl, accountId);
       return failureStatus;
     }
 
@@ -300,6 +309,7 @@ export async function runOneTask(input: {
       await store.appendMapping(mapping);
     }
     await store.writeStatus({
+      accountId,
       task,
       status: "downloaded",
       pages,
@@ -310,7 +320,7 @@ export async function runOneTask(input: {
     return "downloaded";
   } catch (error) {
     await logger.event("ERROR", "Task failed", { taskId: task.taskId, error: String(error) });
-    await writeFailure(store, task, "task_failed", String(error), page.url());
+    await writeFailure(store, task, "task_failed", String(error), page.url(), accountId);
     return "task_failed";
   }
 }
@@ -340,9 +350,11 @@ async function writeFailure(
   task: RequestTask,
   status: Extract<FinalTaskStatus, "filter_not_applied" | "task_failed" | "no_downloadable_report" | "special_company_case">,
   note: string,
-  pageUrl: string
+  pageUrl: string,
+  accountId?: string | undefined
 ): Promise<void> {
   await store.writeStatus({
+    accountId,
     task,
     status,
     pages: 0,
