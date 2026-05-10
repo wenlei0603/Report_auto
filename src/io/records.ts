@@ -7,6 +7,7 @@ import { appendJsonl, readJsonl } from "./jsonl.js";
 
 const MAPPING_HEADERS = [
   "timestamp",
+  "account_id",
   "task_id",
   "company",
   "date_from",
@@ -23,6 +24,7 @@ const MAPPING_HEADERS = [
 const PROGRESS_HEADERS = [
   "timestamp",
   "run_date",
+  "account_id",
   "task_id",
   "company",
   "date_from",
@@ -73,7 +75,13 @@ export class RecordStore {
     return dailyPageUsage(records, runDate);
   }
 
+  async dailyPagesForAccount(accountId: string, runDate = todayIso()): Promise<number> {
+    const records = await readJsonl<TaskStatusRecord>(this.statusJsonl);
+    return dailyPageUsageForAccount(records, runDate, accountId);
+  }
+
   async writeStatus(input: {
+    accountId?: string;
     task: RequestTask;
     status: FinalTaskStatus;
     pages: number;
@@ -85,6 +93,7 @@ export class RecordStore {
     const existingRecords = await readJsonl<TaskStatusRecord>(this.statusJsonl);
     const now = timestampIso();
     const record: TaskStatusRecord = {
+      ...(input.accountId ? { accountId: input.accountId } : {}),
       ts: now,
       timestamp: now,
       runDate,
@@ -100,11 +109,14 @@ export class RecordStore {
       pageUrl: input.pageUrl,
       artifacts: input.artifacts ?? []
     };
-    record.dailyTotalPages = dailyPageUsage([...existingRecords, record], runDate);
+    record.dailyTotalPages = record.accountId
+      ? dailyPageUsageForAccount([...existingRecords, record], runDate, record.accountId)
+      : dailyPageUsage([...existingRecords, record], runDate);
     await appendJsonl(this.statusJsonl, record);
     await appendCsvRow(this.progressCsv, [
       record.timestamp,
       record.runDate,
+      record.accountId ?? "",
       record.taskId,
       record.company,
       record.dateFrom,
@@ -123,6 +135,7 @@ export class RecordStore {
     await ensureCsvHeader(this.mappingCsv, MAPPING_HEADERS);
     await appendCsvRow(this.mappingCsv, [
       record.timestamp,
+      record.accountId ?? "",
       record.taskId,
       record.company,
       record.dateFrom,
@@ -154,10 +167,28 @@ function dailyPageUsage(records: TaskStatusRecord[], runDate: string): number {
   return [...latestAccountingRecordByTask(records, runDate).values()].reduce((sum, record) => sum + Math.max(0, record.pages || 0), 0);
 }
 
+function dailyPageUsageForAccount(records: TaskStatusRecord[], runDate: string, accountId: string): number {
+  return [...latestAccountingRecordByTaskForAccount(records, runDate, accountId).values()].reduce(
+    (sum, record) => sum + Math.max(0, record.pages || 0),
+    0
+  );
+}
+
 function latestAccountingRecordByTask(records: TaskStatusRecord[], runDate: string): Map<string, TaskStatusRecord> {
   const latest = new Map<string, TaskStatusRecord>();
   for (const record of records) {
     if (record.runDate !== runDate || !PAGE_ACCOUNTING_STATUSES.has(record.status)) {
+      continue;
+    }
+    latest.set(record.taskId, record);
+  }
+  return latest;
+}
+
+function latestAccountingRecordByTaskForAccount(records: TaskStatusRecord[], runDate: string, accountId: string): Map<string, TaskStatusRecord> {
+  const latest = new Map<string, TaskStatusRecord>();
+  for (const record of records) {
+    if (record.runDate !== runDate || !PAGE_ACCOUNTING_STATUSES.has(record.status) || record.accountId !== accountId) {
       continue;
     }
     latest.set(record.taskId, record);

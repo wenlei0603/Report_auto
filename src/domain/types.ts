@@ -31,6 +31,7 @@ export interface DownloadArtifact {
 }
 
 export interface MappingRecord {
+  accountId?: string;
   timestamp: string;
   taskId: string;
   company: string;
@@ -46,6 +47,7 @@ export interface MappingRecord {
 }
 
 export interface TaskStatusRecord {
+  accountId?: string;
   ts: string;
   timestamp: string;
   runDate: string;
