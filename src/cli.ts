@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { loadConfig } from "./config.js";
 import { inspectCurrentBrowser, runAutomation } from "./automation/engine.js";
 import { runParallelAutomation } from "./automation/parallelEngine.js";
+import { applyEnvAccounts, buildParallelPreflightResult, loadDotEnv, mergedLocalEnv } from "./runtime/parallelEnv.js";
 
 const program = new Command();
 
@@ -41,7 +42,7 @@ program
   .option("--include-done", "include tasks that already have terminal status records", false)
   .action(async (options) => {
     const rootOptions = program.opts<{ config: string }>();
-    const config = await loadConfig(rootOptions.config);
+    const config = await loadConfigWithLocalEnv(rootOptions.config);
     await runParallelAutomation(config, {
       dryRun: Boolean(options.dryRun),
       maxTasks: options.maxTasks,
@@ -49,6 +50,31 @@ program
       startFromTask: options.startFromTask,
       includeDone: Boolean(options.includeDone)
     });
+  });
+
+program
+  .command("preflight-parallel")
+  .description("Check local parallel account profile and CDP configuration")
+  .action(async () => {
+    const rootOptions = program.opts<{ config: string }>();
+    const dotEnv = await loadDotEnv();
+    const env = mergedLocalEnv(dotEnv);
+    const config = applyEnvAccounts(await loadConfig(rootOptions.config), env);
+    const result = await buildParallelPreflightResult(config, env);
+    process.stdout.write(`Parallel preflight accounts=${result.accounts.length}\n`);
+    for (const account of result.accounts) {
+      const profile = "profile_dir" in account && account.profile_dir ? "profile configured" : "profile not configured";
+      process.stdout.write(`- ${account.id}: ${account.cdp_endpoint}; ${profile}\n`);
+    }
+    if (result.passwordKeysIgnored.length) {
+      process.stdout.write(`Ignored secret-like env keys: ${result.passwordKeysIgnored.length}\n`);
+    }
+    if (result.issues.length) {
+      for (const issue of result.issues) {
+        process.stderr.write(`ERROR ${issue}\n`);
+      }
+      process.exitCode = 1;
+    }
   });
 
 program
@@ -65,6 +91,11 @@ program.parseAsync().catch((error: unknown) => {
   process.stderr.write(`${String(error)}\n`);
   process.exitCode = 1;
 });
+
+async function loadConfigWithLocalEnv(configPath: string) {
+  const dotEnv = await loadDotEnv();
+  return applyEnvAccounts(await loadConfig(configPath), mergedLocalEnv(dotEnv));
+}
 
 function parsePositiveInt(value: string): number {
   const parsed = Number.parseInt(value, 10);

@@ -15,6 +15,7 @@
     "browser:start:parallel": "powershell -ExecutionPolicy Bypass -File scripts/start-parallel-chrome-cdp.ps1",
     "automation:dry-run": "npm run build --silent && node dist/src/cli.js run --dry-run",
     "automation:inspect": "npm run build --silent && node dist/src/cli.js inspect",
+    "automation:parallel:preflight": "npm run build --silent && node dist/src/cli.js preflight-parallel",
     "automation:parallel:dry-run": "npm run build --silent && node dist/src/cli.js run-parallel --dry-run",
     "automation:parallel": "npm run build --silent && node dist/src/cli.js run-parallel"
   },

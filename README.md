@@ -44,7 +44,7 @@ For parallel account runs, start two isolated Chrome profiles:
 npm run browser:start:parallel
 ```
 
-Log in manually in both Chrome windows. Each window must use a different LSEG account and a different Chrome profile.
+Log in manually in both Chrome windows. Each window must use a different LSEG account and a different Chrome profile. For local machine settings, copy `.env.example` to `.env` and set numbered account entries such as `LSEG_ACCOUNT_1_*`, `LSEG_ACCOUNT_2_*`, and later `LSEG_ACCOUNT_3_*` if another account is added. Keep passwords out of `.env`; the runner relies on profile login state and does not read password variables.
 
 ## Configuration
 
@@ -86,6 +86,7 @@ npm run dev -- run --max-tasks 1 --max-downloads 1
 Run a parallel dry run:
 
 ```powershell
+npm run automation:parallel:preflight
 npm run automation:parallel:dry-run -- --max-tasks 5
 ```
 
