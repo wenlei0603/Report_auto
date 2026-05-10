@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { loadConfig } from "./config.js";
 import { inspectCurrentBrowser, runAutomation } from "./automation/engine.js";
+import { runParallelAutomation } from "./automation/parallelEngine.js";
 
 const program = new Command();
 
@@ -22,6 +23,26 @@ program
     const rootOptions = program.opts<{ config: string }>();
     const config = await loadConfig(rootOptions.config);
     await runAutomation(config, {
+      dryRun: Boolean(options.dryRun),
+      maxTasks: options.maxTasks,
+      maxDownloads: options.maxDownloads,
+      startFromTask: options.startFromTask,
+      includeDone: Boolean(options.includeDone)
+    });
+  });
+
+program
+  .command("run-parallel")
+  .description("Run parallel automation across configured LSEG accounts")
+  .option("--dry-run", "parse and print pending tasks without browser actions", false)
+  .option("--max-tasks <count>", "maximum tasks to process across all accounts", parsePositiveInt)
+  .option("--max-downloads <count>", "maximum successful downloads across all accounts", parseNonNegativeInt)
+  .option("--start-from-task <taskId>", "start from a specific task id, for example T0100")
+  .option("--include-done", "include tasks that already have terminal status records", false)
+  .action(async (options) => {
+    const rootOptions = program.opts<{ config: string }>();
+    const config = await loadConfig(rootOptions.config);
+    await runParallelAutomation(config, {
       dryRun: Boolean(options.dryRun),
       maxTasks: options.maxTasks,
       maxDownloads: options.maxDownloads,

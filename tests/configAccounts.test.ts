@@ -118,4 +118,14 @@ describe("normalizeAccounts", () => {
       )
     ).toThrow(/Duplicate account cdp_endpoint: http:\/\/127.0.0.1:9222/);
   });
+
+  test("parallel command is intentionally backed by account normalization", () => {
+    const accounts = normalizeAccounts(
+      baseConfig({
+        accounts: [{ id: "account_a", cdp_endpoint: "http://127.0.0.1:9222", daily_page_limit: 700, download_dir: "out/a" }]
+      })
+    );
+
+    expect(accounts).toHaveLength(1);
+  });
 });
