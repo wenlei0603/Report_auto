@@ -12,8 +12,11 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "browser:start": "powershell -ExecutionPolicy Bypass -File scripts/start-chrome-cdp.ps1",
+    "browser:start:parallel": "powershell -ExecutionPolicy Bypass -File scripts/start-parallel-chrome-cdp.ps1",
     "automation:dry-run": "npm run build --silent && node dist/src/cli.js run --dry-run",
-    "automation:inspect": "npm run build --silent && node dist/src/cli.js inspect"
+    "automation:inspect": "npm run build --silent && node dist/src/cli.js inspect",
+    "automation:parallel:dry-run": "npm run build --silent && node dist/src/cli.js run-parallel --dry-run",
+    "automation:parallel": "npm run build --silent && node dist/src/cli.js run-parallel"
   },
   "dependencies": {
     "@playwright/test": "^1.55.0",

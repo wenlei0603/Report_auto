@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { shouldWorkerContinueAfterStatus } from "../src/automation/parallelEngine.js";
+import { nextSessionFailureAction, shouldWorkerContinueAfterStatus } from "../src/automation/parallelEngine.js";
 import { TaskQueue } from "../src/automation/taskQueue.js";
 import type { RequestTask } from "../src/domain/types.js";
 
@@ -14,6 +14,16 @@ describe("parallel worker stop semantics", () => {
 
   test("filter_not_applied allows later tasks to continue", () => {
     expect(shouldWorkerContinueAfterStatus("filter_not_applied")).toBe(true);
+  });
+});
+
+describe("parallel session failure recovery policy", () => {
+  test("reconnects and retries the task on first session-like task failure", () => {
+    expect(nextSessionFailureAction(0)).toBe("retry_session");
+  });
+
+  test("hands the account to human review after the second session-like task failure", () => {
+    expect(nextSessionFailureAction(1)).toBe("human_review");
   });
 });
 

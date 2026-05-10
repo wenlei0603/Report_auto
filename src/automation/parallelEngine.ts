@@ -9,6 +9,7 @@ import { RecordStore } from "../io/records.js";
 import { RunLogger } from "../io/runLogger.js";
 import { effectiveMaxDownloads, runOneTask, selectPendingTasks, type RunOptions } from "./engine.js";
 import { TaskQueue } from "./taskQueue.js";
+import type { BrowserSession } from "../browser/types.js";
 
 export interface ParallelRunSummary {
   accountCount: number;
@@ -63,18 +64,12 @@ async function runAccountWorker(
   await accountStore.initialize();
   const usedPages = await store.dailyPagesForAccount(account.id);
   const pageGuard = new PageGuard(account.daily_page_limit, usedPages);
-  const session = await openBrowserSession(config, logger);
+  let session = await openAccountSession(config, account.id, logger);
   let globalApplied = false;
   const maxDownloads = effectiveMaxDownloads(config, options);
+  let sessionFailureCount = 0;
 
   try {
-    await waitForResearchScope(session.page, config, logger);
-    const initialState = await classifyAppState(session.page, config);
-    await logger.event("INFO", "Initial parallel worker app state", { accountId: account.id, ...initialState });
-    if (initialState.state === "auth") {
-      throw new Error(`LSEG session is not authenticated for account ${account.id}`);
-    }
-
     while (true) {
       if (options.maxTasks && counters.leasedTasks >= options.maxTasks) {
         break;
@@ -100,16 +95,59 @@ async function runAccountWorker(
         accountId: account.id,
         applyGlobalFilters: !globalApplied || !config.behavior.apply_global_filters_once
       });
+      let finalStatus = status;
+
+      if (status === "task_failed") {
+        const action = nextSessionFailureAction(sessionFailureCount);
+        sessionFailureCount += 1;
+        await logger.event("WARN", "Parallel worker task failed; applying session recovery policy", {
+          accountId: account.id,
+          taskId: task.taskId,
+          action,
+          sessionFailureCount
+        });
+
+        if (action === "retry_session") {
+          await session.browser.close().catch(() => undefined);
+          session = await openAccountSession(config, account.id, logger);
+          globalApplied = false;
+          finalStatus = await runOneTask({
+            config,
+            logger,
+            store: accountStore,
+            task,
+            pageGuard,
+            page: session.page,
+            accountId: account.id,
+            applyGlobalFilters: true
+          });
+          if (finalStatus === "task_failed") {
+            sessionFailureCount += 1;
+          }
+        }
+
+        if (finalStatus === "task_failed" && sessionFailureCount >= 2) {
+          await accountStore.writeStatus({
+            accountId: account.id,
+            task,
+            status: "special_company_case",
+            pages: 0,
+            note: "human_review_required:session_failed_twice",
+            pageUrl: session.page.url()
+          });
+          finalStatus = "special_company_case";
+        }
+      }
 
       queue.complete(task.taskId);
       counters.inFlightTasks -= 1;
       counters.completedTasks += 1;
-      if (status === "downloaded") {
+      if (finalStatus === "downloaded") {
         counters.downloadedTasks += 1;
       }
-      globalApplied = status !== "filter_not_applied";
+      globalApplied = finalStatus !== "filter_not_applied";
 
-      if (!shouldWorkerContinueAfterStatus(status)) {
+      if (!shouldWorkerContinueAfterStatus(finalStatus) || sessionFailureCount >= 2) {
         break;
       }
     }
@@ -118,6 +156,21 @@ async function runAccountWorker(
   }
 }
 
+async function openAccountSession(config: LsegConfig, accountId: string, logger: RunLogger): Promise<BrowserSession> {
+  const session = await openBrowserSession(config, logger);
+  await waitForResearchScope(session.page, config, logger);
+  const initialState = await classifyAppState(session.page, config);
+  await logger.event("INFO", "Parallel worker app state", { accountId, ...initialState });
+  if (initialState.state === "auth") {
+    throw new Error(`LSEG session is not authenticated for account ${accountId}`);
+  }
+  return session;
+}
+
 export function shouldWorkerContinueAfterStatus(status: FinalTaskStatus): boolean {
   return status !== "page_limit" && status !== "max_downloads";
+}
+
+export function nextSessionFailureAction(previousSessionFailures: number): "retry_session" | "human_review" {
+  return previousSessionFailures <= 0 ? "retry_session" : "human_review";
 }

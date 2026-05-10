@@ -38,6 +38,14 @@ npm run browser:start
 
 Log in to LSEG in that browser window before running automation commands.
 
+For parallel account runs, start two isolated Chrome profiles:
+
+```powershell
+npm run browser:start:parallel
+```
+
+Log in manually in both Chrome windows. Each window must use a different LSEG account and a different Chrome profile.
+
 ## Configuration
 
 Edit `config/lseg.yaml` before a real run.
@@ -74,6 +82,20 @@ Run one conservative live task:
 ```powershell
 npm run dev -- run --max-tasks 1 --max-downloads 1
 ```
+
+Run a parallel dry run:
+
+```powershell
+npm run automation:parallel:dry-run -- --max-tasks 5
+```
+
+Start a parallel live run after both browser windows are logged in:
+
+```powershell
+npm run automation:parallel -- --max-downloads 0
+```
+
+`--max-downloads 0` disables the successful-download count cap. Per-account page limits still apply.
 
 Resume from a specific task:
 

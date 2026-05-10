@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooseCompanyCandidate,
   chooseContributorCandidate,
+  evaluateSearchFilterInitialization,
   isContributorSuggestionSnapshotReady,
   isSuggestionSnapshotReady
 } from "../src/browser/filters.js";
@@ -144,5 +145,49 @@ describe("contributor suggestion readiness", () => {
         2
       )
     ).toBe(false);
+  });
+});
+
+describe("search filter initialization validation", () => {
+  it("accepts the required initial Research Next filters", () => {
+    expect(
+      evaluateSearchFilterInitialization({
+        contributorLabels: ["Morgan Stanley"],
+        preferredContributorChecked: false,
+        dateRangeMode: "Custom",
+        industryLabels: [],
+        countryLabels: ["United States of America"]
+      })
+    ).toEqual({ ok: true, reasons: [] });
+  });
+
+  it("rejects preferred contributor and non-custom date mode", () => {
+    expect(
+      evaluateSearchFilterInitialization({
+        contributorLabels: ["Morgan Stanley"],
+        preferredContributorChecked: true,
+        dateRangeMode: "Last 90 Days",
+        industryLabels: [],
+        countryLabels: ["United States of America"]
+      })
+    ).toEqual({
+      ok: false,
+      reasons: ["preferred_contributor_checked", "date_range_not_custom"]
+    });
+  });
+
+  it("rejects extra contributors and non-US region", () => {
+    expect(
+      evaluateSearchFilterInitialization({
+        contributorLabels: ["Morgan Stanley", "Morningstar, Inc."],
+        preferredContributorChecked: false,
+        dateRangeMode: "Custom",
+        industryLabels: ["Healthcare"],
+        countryLabels: ["Canada"]
+      })
+    ).toEqual({
+      ok: false,
+      reasons: ["contributor_not_exact_morgan_stanley", "industry_not_any", "country_not_united_states"]
+    });
   });
 });

@@ -25,6 +25,19 @@ export interface ContributorCandidate {
   matchType: string;
 }
 
+export interface SearchFilterInitializationState {
+  contributorLabels: string[];
+  preferredContributorChecked: boolean;
+  dateRangeMode: string;
+  industryLabels: string[];
+  countryLabels: string[];
+}
+
+export interface SearchFilterInitializationValidation {
+  ok: boolean;
+  reasons: string[];
+}
+
 const COMPANY_SUFFIX_WORDS = new Set(["co", "inc", "corp", "corporation", "ltd", "limited", "plc", "group", "sa", "ag"]);
 
 export interface SuggestionSnapshot {
@@ -36,6 +49,30 @@ export interface SuggestionSnapshot {
 
 export function isQueryModeReady(evidence: QueryModeEvidence): boolean {
   return evidence.hasExpandedFilterPanel && (evidence.hasVisibleCompanyInput || evidence.hasVisibleCompanySelector);
+}
+
+export function evaluateSearchFilterInitialization(state: SearchFilterInitializationState): SearchFilterInitializationValidation {
+  const reasons: string[] = [];
+  const contributors = state.contributorLabels.map(normalizeText).filter(Boolean);
+  if (contributors.length !== 1 || contributors[0] !== "morgan stanley") {
+    reasons.push("contributor_not_exact_morgan_stanley");
+  }
+  if (state.preferredContributorChecked) {
+    reasons.push("preferred_contributor_checked");
+  }
+  if (!normalizeText(state.dateRangeMode).includes("custom")) {
+    reasons.push("date_range_not_custom");
+  }
+  const industryLabels = state.industryLabels.map(normalizeText).filter(Boolean);
+  if (industryLabels.length > 0 && !industryLabels.some((label) => label === "any" || label === "none")) {
+    reasons.push("industry_not_any");
+  }
+  const countryLabels = state.countryLabels.map(normalizeText).filter(Boolean);
+  const hasUnitedStates = countryLabels.some((label) => label === "usa" || label.includes("united states"));
+  if (!hasUnitedStates) {
+    reasons.push("country_not_united_states");
+  }
+  return { ok: reasons.length === 0, reasons };
 }
 
 export function chooseCompanyCandidate(
@@ -367,6 +404,93 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
     Number((details as any).preferredStillChecked ?? 0) === 0;
 
   return { ok, reason: ok ? "global_filters_validated" : "global_filters_failed", details: details as Record<string, unknown> };
+}
+
+export async function initializeSearchFilters(scope: AutomationScope, config: LsegConfig): Promise<FilterResult> {
+  await closePopupDialogs(scope);
+  const globalResult = await applyGlobalFilters(scope, config);
+  if (!globalResult.ok) {
+    return globalResult;
+  }
+
+  const dateResult = await ensureDateRangeCustomMode(scope);
+  const snapshot = await readSearchFilterInitializationState(scope);
+  const validation = evaluateSearchFilterInitialization({
+    ...snapshot,
+    dateRangeMode: dateResult.mode || snapshot.dateRangeMode
+  });
+  return {
+    ok: validation.ok,
+    reason: validation.ok ? "search_filters_initialized" : "search_filter_initialization_failed",
+    details: {
+      global: globalResult.details,
+      date: dateResult,
+      snapshot,
+      validation
+    }
+  };
+}
+
+async function ensureDateRangeCustomMode(scope: AutomationScope): Promise<{ ok: boolean; mode: string; reason: string }> {
+  const page = owningPage(scope);
+  const result = await scope.evaluate(() => {
+    const root = document.querySelector("app-date-range-filter");
+    if (!root) {
+      return { ok: false, mode: "", reason: "no_date_range_filter" };
+    }
+
+    const text = String(root.textContent ?? "");
+    if (/custom/i.test(text) && !/last\s*90\s*days/i.test(text)) {
+      return { ok: true, mode: "Custom", reason: "already_custom" };
+    }
+
+    (root.querySelector("coral-select") as HTMLElement | null)?.click();
+    const custom = [...root.querySelectorAll("coral-item")].find((item) => /custom/i.test((item.textContent ?? "").trim()));
+    if (custom instanceof HTMLElement) {
+      custom.click();
+      return { ok: true, mode: "Custom", reason: "custom_clicked" };
+    }
+    return { ok: false, mode: text.trim(), reason: "custom_option_not_found" };
+  });
+  await page.waitForTimeout(250);
+  await closePopupDialogs(scope);
+  return result;
+}
+
+async function readSearchFilterInitializationState(scope: AutomationScope): Promise<SearchFilterInitializationState> {
+  return scope
+    .evaluate(() => {
+      const selectedLabels = (selector: string) => {
+        const el = document.querySelector<any>(selector);
+        const labels = Array.isArray(el?.selectedLabels) ? el.selectedLabels.map((item: unknown) => String(item)) : [];
+        if (labels.length > 0) {
+          return labels;
+        }
+        return String(el?.textContent ?? "")
+          .split(/\n|,/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      };
+      const preferredContributorChecked = [...document.querySelectorAll<any>("app-contributors-filter coral-checkbox")].some((cb) => {
+        const label = String(cb.textContent ?? "").toLowerCase();
+        const checked = cb.hasAttribute("checked") || cb.checked === true || cb.getAttribute("aria-checked") === "true";
+        return label.includes("preferred") && checked;
+      });
+      return {
+        contributorLabels: selectedLabels("app-contributors-filter app-multi-select emerald-multi-select"),
+        preferredContributorChecked,
+        dateRangeMode: String(document.querySelector("app-date-range-filter")?.textContent ?? ""),
+        industryLabels: selectedLabels("app-industry-filter emerald-multi-select"),
+        countryLabels: selectedLabels("app-regions-filter emerald-multi-select")
+      };
+    })
+    .catch(() => ({
+      contributorLabels: [],
+      preferredContributorChecked: false,
+      dateRangeMode: "",
+      industryLabels: [],
+      countryLabels: []
+    }));
 }
 
 async function setContributor(scope: AutomationScope, contributor: string): Promise<Record<string, unknown>> {

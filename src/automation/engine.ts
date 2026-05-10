@@ -1,5 +1,5 @@
 import type { LsegConfig } from "../config.js";
-import { applyGlobalFilters, applyTaskFilters, ensureQueryMode } from "../browser/filters.js";
+import { applyTaskFilters, ensureQueryMode, initializeSearchFilters } from "../browser/filters.js";
 import { executeBulkDownload } from "../browser/download.js";
 import { reviewResultCompanyList } from "../browser/results.js";
 import { openBrowserSession } from "../browser/session.js";
@@ -159,7 +159,7 @@ export async function runOneTask(input: {
     }
 
     if (input.applyGlobalFilters) {
-      const globalResult = await applyGlobalFilters(scope, config);
+      const globalResult = await initializeSearchFilters(scope, config);
       await logger.event(globalResult.ok ? "INFO" : "WARN", "Global filter result", globalResult.details);
       if (!globalResult.ok) {
         await writeFailure(store, task, "filter_not_applied", globalResult.reason, page.url(), accountId);

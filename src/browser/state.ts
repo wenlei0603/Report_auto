@@ -106,13 +106,17 @@ function classifyText(text: string): AppState | null {
   if (/document information|save documents to pc|save to my pc/i.test(text)) {
     return "document_info";
   }
-  if (/sign in|signed in to another device|session expired|log in/i.test(text)) {
+  if (/sign in|signed in to another device|log in/i.test(text) || classifySessionFailureText(text)) {
     return "auth";
   }
   if (/loading|please wait/i.test(text)) {
     return "loading";
   }
   return null;
+}
+
+export function classifySessionFailureText(text: string): boolean {
+  return /\byour\s+session\s+(?:is\s+)?expired\b/i.test(text) || /\bsession\s+(?:has\s+)?expired\b/i.test(text);
 }
 
 async function estimatePagesFromRows(scope: AutomationScope, _config: LsegConfig): Promise<number> {

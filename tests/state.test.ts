@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyUrl } from "../src/browser/state.js";
+import { classifySessionFailureText, classifyUrl } from "../src/browser/state.js";
 import { isQueryModeReady } from "../src/browser/filters.js";
 import { workspacePageRank } from "../src/browser/session.js";
 
@@ -14,6 +14,21 @@ describe("URL state classifier", () => {
 
   it("returns null when URL alone is not enough", () => {
     expect(classifyUrl("https://workspace.refinitiv.com/Apps/research-next/2.22.3/#/")).toBeNull();
+  });
+});
+
+describe("session failure text classifier", () => {
+  it("detects the green session-expired toast text", () => {
+    expect(classifySessionFailureText("Your session is expired. Please sign in again.")).toBe(true);
+  });
+
+  it("detects common expired-session variants", () => {
+    expect(classifySessionFailureText("Your session has expired")).toBe(true);
+    expect(classifySessionFailureText("session expired")).toBe(true);
+  });
+
+  it("does not treat normal loading text as session failure", () => {
+    expect(classifySessionFailureText("Loading Research Next, please wait")).toBe(false);
   });
 });
 

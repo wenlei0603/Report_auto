@@ -1,0 +1,51 @@
+param(
+  [string]$PortA = "9222",
+  [string]$PortB = "9223",
+  [string]$UserDataDirA = "D:\chrome-rpa-profile-account-a",
+  [string]$UserDataDirB = "D:\chrome-rpa-profile-account-b",
+  [string]$Url = "https://workspace.refinitiv.com/web/Apps/research-next/?st=OAPermID#/?st=OAPermID"
+)
+
+function Start-CdpChrome {
+  param(
+    [string]$Port,
+    [string]$UserDataDir,
+    [string]$Url
+  )
+
+  $versionUrl = "http://127.0.0.1:$Port/json/version"
+  try {
+    Invoke-RestMethod -Uri $versionUrl -TimeoutSec 2 | Out-Null
+    Write-Host "Chrome CDP is already available at $versionUrl"
+    return
+  } catch {
+    Write-Host "Starting Chrome with remote debugging on port $Port"
+  }
+
+  $chromeCandidates = @(@(
+    "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+    "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+    "$env:LocalAppData\Google\Chrome\Application\chrome.exe"
+  ) | Where-Object { $_ -and (Test-Path $_) })
+
+  if ($chromeCandidates.Count -eq 0) {
+    throw "Chrome executable not found. Install Chrome or start a compatible Chromium browser manually with --remote-debugging-port=$Port."
+  }
+
+  New-Item -ItemType Directory -Force -Path $UserDataDir | Out-Null
+
+  Start-Process -FilePath $chromeCandidates[0] -ArgumentList @(
+    "--remote-debugging-port=$Port",
+    "--user-data-dir=$UserDataDir",
+    "--no-first-run",
+    "--disable-popup-blocking",
+    $Url
+  )
+}
+
+Start-CdpChrome -Port $PortA -UserDataDir $UserDataDirA -Url $Url
+Start-CdpChrome -Port $PortB -UserDataDir $UserDataDirB -Url $Url
+
+Write-Host "Parallel Chrome windows started. Log in to each LSEG account manually, then run:"
+Write-Host "  node dist/src/cli.js run-parallel --dry-run --max-tasks 5"
+Write-Host "  node dist/src/cli.js run-parallel --max-downloads 0"
