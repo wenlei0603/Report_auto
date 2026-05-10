@@ -19,6 +19,13 @@ const SelectorsSchema = z.object({
   report_date: z.array(z.string())
 });
 
+const AccountSchema = z.object({
+  id: z.string().min(1),
+  cdp_endpoint: z.string().min(1),
+  daily_page_limit: z.number().int().positive(),
+  download_dir: z.string().min(1)
+});
+
 const ConfigSchema = z.object({
   workspace_url: z.string().url(),
   input_file: z.string(),
@@ -30,6 +37,7 @@ const ConfigSchema = z.object({
   daily_page_limit: z.number().int().positive(),
   max_downloads: z.number().int().min(0),
   cdp_endpoint: z.string(),
+  accounts: z.array(AccountSchema).optional(),
   browser: z.object({
     headless: z.boolean(),
     slow_mo_ms: z.number().int().min(0),
@@ -58,6 +66,7 @@ const ConfigSchema = z.object({
 });
 
 export type LsegConfig = z.infer<typeof ConfigSchema>;
+export type LsegAccountConfig = z.infer<typeof AccountSchema>;
 
 export async function loadConfig(configPath: string, projectRoot = process.cwd()): Promise<LsegConfig> {
   const resolved = resolveProjectPath(configPath, projectRoot);
@@ -74,6 +83,40 @@ function resolveConfigPaths(config: LsegConfig, projectRoot: string): LsegConfig
     mapping_csv: resolveProjectPath(config.mapping_csv, projectRoot),
     status_log_jsonl: resolveProjectPath(config.status_log_jsonl, projectRoot),
     progress_csv: resolveProjectPath(config.progress_csv, projectRoot),
-    run_log_jsonl: resolveProjectPath(config.run_log_jsonl, projectRoot)
+    run_log_jsonl: resolveProjectPath(config.run_log_jsonl, projectRoot),
+    accounts: config.accounts?.map((account) => ({
+      ...account,
+      download_dir: resolveProjectPath(account.download_dir, projectRoot)
+    }))
   };
+}
+
+export function normalizeAccounts(config: LsegConfig): LsegAccountConfig[] {
+  const accounts = config.accounts?.length
+    ? config.accounts
+    : [
+        {
+          id: "default",
+          cdp_endpoint: config.cdp_endpoint,
+          daily_page_limit: config.daily_page_limit,
+          download_dir: config.download_dir
+        }
+      ];
+  assertUniqueAccounts(accounts);
+  return accounts;
+}
+
+function assertUniqueAccounts(accounts: LsegAccountConfig[]): void {
+  const ids = new Set<string>();
+  const endpoints = new Set<string>();
+  for (const account of accounts) {
+    if (ids.has(account.id)) {
+      throw new Error(`Duplicate account id: ${account.id}`);
+    }
+    ids.add(account.id);
+    if (endpoints.has(account.cdp_endpoint)) {
+      throw new Error(`Duplicate account cdp_endpoint: ${account.cdp_endpoint}`);
+    }
+    endpoints.add(account.cdp_endpoint);
+  }
 }
