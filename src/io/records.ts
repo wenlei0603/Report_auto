@@ -81,7 +81,7 @@ export class RecordStore {
   }
 
   async writeStatus(input: {
-    accountId?: string;
+    accountId?: string | undefined;
     task: RequestTask;
     status: FinalTaskStatus;
     pages: number;

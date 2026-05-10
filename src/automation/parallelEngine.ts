@@ -63,7 +63,7 @@ async function runAccountWorker(
   await accountStore.initialize();
   const usedPages = await store.dailyPagesForAccount(account.id);
   const pageGuard = new PageGuard(account.daily_page_limit, usedPages);
-  let session = await openBrowserSession(config, logger);
+  const session = await openBrowserSession(config, logger);
   let globalApplied = false;
   const maxDownloads = effectiveMaxDownloads(config, options);
 
