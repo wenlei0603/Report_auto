@@ -8,6 +8,7 @@ import {
   selectedRowPages,
   shouldWaitBeforeReconnect
 } from "../src/browser/download.js";
+import type { MappingRecord } from "../src/domain/types.js";
 
 describe("download handoff timing", () => {
   it("waits before reconnecting after BatchSavePrint CDP detach handoff", () => {
@@ -50,5 +51,25 @@ describe("download handoff timing", () => {
         selectedRows: [{ pages: "14" }, { pages: "8 pgs" }, { pages: "N/A" }]
       } as never)
     ).toBe(22);
+  });
+
+  it("download mapping records can carry account id", () => {
+    const mapping: MappingRecord = {
+      accountId: "account_a",
+      timestamp: "2026-05-10T00:00:00.000Z",
+      taskId: "T0001",
+      company: "Example Corp",
+      dateFrom: "01-Jan-2016",
+      dateTo: "08-Jan-2016",
+      reportTitle: "Report",
+      reportDate: "01-Jan-2016",
+      pages: 1,
+      filePath: "file.pdf",
+      status: "downloaded",
+      error: "",
+      sourceUrl: "url"
+    };
+
+    expect(mapping.accountId).toBe("account_a");
   });
 });
