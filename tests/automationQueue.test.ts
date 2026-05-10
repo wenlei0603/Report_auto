@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectPendingTasks, shouldStopRunAfterStatus } from "../src/automation/engine.js";
+import { effectiveMaxDownloads, selectPendingTasks, shouldStopRunAfterStatus } from "../src/automation/engine.js";
 import type { RequestTask } from "../src/domain/types.js";
 
 describe("automation task queue selection", () => {
@@ -24,6 +24,10 @@ describe("automation run stop conditions", () => {
   it("stops the run when the page guard reaches the daily limit", () => {
     expect(shouldStopRunAfterStatus("page_limit")).toBe(true);
     expect(shouldStopRunAfterStatus("no_rows")).toBe(false);
+  });
+
+  it("prefers CLI max download override over config value", () => {
+    expect(effectiveMaxDownloads({ max_downloads: 3 } as never, { dryRun: false, maxDownloads: 1 })).toBe(1);
   });
 });
 

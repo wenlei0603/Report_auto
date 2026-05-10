@@ -137,7 +137,7 @@ async function reconnectBrowserSession(config: LsegConfig, logger: RunLogger) {
   return session;
 }
 
-async function runOneTask(input: {
+export async function runOneTask(input: {
   config: LsegConfig;
   logger: RunLogger;
   store: RecordStore;
@@ -331,7 +331,7 @@ export function shouldStopRunAfterStatus(status: FinalTaskStatus): boolean {
   return status === "page_limit" || status === "max_downloads";
 }
 
-function effectiveMaxDownloads(config: LsegConfig, options: RunOptions): number {
+export function effectiveMaxDownloads(config: Pick<LsegConfig, "max_downloads">, options: RunOptions): number {
   return options.maxDownloads ?? config.max_downloads;
 }
 
