@@ -23,7 +23,8 @@ const AccountSchema = z.object({
   id: z.string().min(1),
   cdp_endpoint: z.string().min(1),
   daily_page_limit: z.number().int().positive(),
-  download_dir: z.string().min(1)
+  download_dir: z.string().min(1),
+  inherit_untagged_usage: z.boolean().optional()
 });
 
 const ConfigSchema = z.object({

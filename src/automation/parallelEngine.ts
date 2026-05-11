@@ -60,9 +60,13 @@ async function runAccountWorker(
 ): Promise<void> {
   const config = configForAccount(baseConfig, account);
   const logger = new RunLogger(config.run_log_jsonl);
-  const accountStore = new RecordStore(config.mapping_csv, config.status_log_jsonl, config.progress_csv, account.daily_page_limit);
+  const accountStore = new RecordStore(config.mapping_csv, config.status_log_jsonl, config.progress_csv, account.daily_page_limit, {
+    ...(account.inherit_untagged_usage ? { includeUntaggedPagesForAccountId: account.id } : {})
+  });
   await accountStore.initialize();
-  const usedPages = await store.dailyPagesForAccount(account.id);
+  const usedPages = await store.dailyPagesForAccount(account.id, undefined, {
+    includeUntagged: Boolean(account.inherit_untagged_usage)
+  });
   const pageGuard = new PageGuard(account.daily_page_limit, usedPages);
   let session = await openAccountSession(config, account.id, logger);
   let globalApplied = false;

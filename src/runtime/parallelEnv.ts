@@ -12,6 +12,10 @@ export interface ParallelPreflightResult {
   passwordKeysIgnored: string[];
 }
 
+export interface AccountFilterConfigurationState {
+  state: string;
+}
+
 type EnvMap = Record<string, string | undefined>;
 
 export function parseDotEnv(text: string): Record<string, string> {
@@ -69,16 +73,22 @@ export function buildParallelAccountSpecs(env: EnvMap): ParallelAccountSpec[] {
     const downloadDir = requiredEnv(env, `${prefix}DOWNLOAD_DIR`);
     const dailyLimit = parsePositiveInteger(env[`${prefix}DAILY_PAGE_LIMIT`] ?? "700", `${prefix}DAILY_PAGE_LIMIT`);
     const profileDir = env[`${prefix}PROFILE_DIR`]?.trim();
+    const inheritUntaggedUsage = parseOptionalBoolean(env[`${prefix}INHERIT_UNTAGGED_USAGE`], `${prefix}INHERIT_UNTAGGED_USAGE`);
     specs.push({
       id,
       cdp_endpoint: cdpEndpoint,
       daily_page_limit: dailyLimit,
       download_dir: downloadDir,
-      ...(profileDir ? { profile_dir: profileDir } : {})
+      ...(profileDir ? { profile_dir: profileDir } : {}),
+      ...(inheritUntaggedUsage ? { inherit_untagged_usage: true } : {})
     });
   }
   assertUniqueSpecs(specs);
   return specs;
+}
+
+export function accountReadyForFilterConfiguration(state: AccountFilterConfigurationState | undefined): boolean {
+  return state?.state === "query";
 }
 
 export async function buildParallelPreflightResult(config: LsegConfig, env: EnvMap): Promise<ParallelPreflightResult> {
@@ -113,7 +123,7 @@ async function checkCdpEndpoint(endpoint: string): Promise<string | undefined> {
 function parallelAccountIndexes(env: EnvMap): number[] {
   const indexes = new Set<number>();
   for (const key of Object.keys(env)) {
-    const match = /^LSEG_ACCOUNT_(\d+)_(ID|CDP_ENDPOINT|DOWNLOAD_DIR|DAILY_PAGE_LIMIT|PROFILE_DIR)$/.exec(key);
+    const match = /^LSEG_ACCOUNT_(\d+)_(ID|CDP_ENDPOINT|DOWNLOAD_DIR|DAILY_PAGE_LIMIT|PROFILE_DIR|INHERIT_UNTAGGED_USAGE)$/.exec(key);
     if (match) {
       indexes.add(Number(match[1]));
     }
@@ -135,6 +145,19 @@ function parsePositiveInteger(value: string, key: string): number {
     throw new Error(`Expected positive integer for ${key}, got ${value}`);
   }
   return parsed;
+}
+
+function parseOptionalBoolean(value: string | undefined, key: string): boolean {
+  if (value === undefined || value.trim() === "") {
+    return false;
+  }
+  if (/^(true|1|yes)$/i.test(value.trim())) {
+    return true;
+  }
+  if (/^(false|0|no)$/i.test(value.trim())) {
+    return false;
+  }
+  throw new Error(`Expected boolean for ${key}, got ${value}`);
 }
 
 function assertUniqueSpecs(specs: ParallelAccountSpec[]): void {

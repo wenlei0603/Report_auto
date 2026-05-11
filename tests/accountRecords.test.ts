@@ -51,6 +51,51 @@ describe("account-aware records", () => {
     await expect(store.dailyPages()).resolves.toBe(77);
   });
 
+  test("selected account can inherit legacy untagged page usage", async () => {
+    const { store } = await storeInTemp();
+    await store.writeStatus({ task, status: "download_started", pages: 77, note: "legacy", pageUrl: "url" });
+    await store.writeStatus({
+      accountId: "account_a",
+      task: { ...task, taskId: "T0002" },
+      status: "download_started",
+      pages: 23,
+      note: "a",
+      pageUrl: "url"
+    });
+    await store.writeStatus({
+      accountId: "account_b",
+      task: { ...task, taskId: "T0003" },
+      status: "download_started",
+      pages: 11,
+      note: "b",
+      pageUrl: "url"
+    });
+
+    await expect(store.dailyPagesForAccount("account_a", undefined, { includeUntagged: true })).resolves.toBe(100);
+    await expect(store.dailyPagesForAccount("account_b")).resolves.toBe(11);
+  });
+
+  test("account status dailyTotalPages can include inherited legacy usage", async () => {
+    const { store, status } = await storeInTemp();
+    await store.writeStatus({ task, status: "download_started", pages: 77, note: "legacy", pageUrl: "url" });
+    await store.writeStatus({
+      accountId: "account_a",
+      task: { ...task, taskId: "T0002" },
+      status: "download_started",
+      pages: 23,
+      note: "a",
+      pageUrl: "url",
+      includeUntaggedPages: true
+    });
+
+    const records = (await readFile(status, "utf8"))
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line) as { accountId?: string; dailyTotalPages: number });
+
+    expect(records[1]).toMatchObject({ accountId: "account_a", dailyTotalPages: 100 });
+  });
+
   test("progress and mapping CSVs include account_id", async () => {
     const { store, progress, mapping } = await storeInTemp();
     await store.writeStatus({ accountId: "account_a", task, status: "download_started", pages: 12, note: "started", pageUrl: "url" });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  dateSummaryMatchesRange,
   chooseCompanyCandidate,
   chooseContributorCandidate,
   evaluateSearchFilterInitialization,
@@ -176,6 +177,21 @@ describe("search filter initialization validation", () => {
     });
   });
 
+  it("rejects full date menu text because it does not prove Custom is selected", () => {
+    expect(
+      evaluateSearchFilterInitialization({
+        contributorLabels: ["Morgan Stanley"],
+        preferredContributorChecked: false,
+        dateRangeMode: "Date Range Today Last 90 Days Custom... OK Cancel",
+        industryLabels: [],
+        countryLabels: ["United States of America"]
+      })
+    ).toEqual({
+      ok: false,
+      reasons: ["date_range_not_custom"]
+    });
+  });
+
   it("rejects extra contributors and non-US region", () => {
     expect(
       evaluateSearchFilterInitialization({
@@ -189,5 +205,19 @@ describe("search filter initialization validation", () => {
       ok: false,
       reasons: ["contributor_not_exact_morgan_stanley", "industry_not_any", "country_not_united_states"]
     });
+  });
+});
+
+describe("date range summary validation", () => {
+  it("accepts the exact custom date range summary emitted by Research Next", () => {
+    expect(dateSummaryMatchesRange("25-Apr-2018 00:00 To 09-May-2018 00:00", "25-Apr-2018 00:00", "09-May-2018 00:00")).toBe(
+      true
+    );
+  });
+
+  it("rejects stale default ranges when task dates were not applied", () => {
+    expect(dateSummaryMatchesRange("09-Feb-2026 00:00 To 10-May-2026 23:19", "25-Apr-2018 00:00", "09-May-2018 00:00")).toBe(
+      false
+    );
   });
 });

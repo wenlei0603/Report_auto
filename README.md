@@ -44,7 +44,7 @@ For parallel account runs, start two isolated Chrome profiles:
 npm run browser:start:parallel
 ```
 
-Log in manually in both Chrome windows. Each window must use a different LSEG account and a different Chrome profile. For local machine settings, copy `.env.example` to `.env` and set numbered account entries such as `LSEG_ACCOUNT_1_*`, `LSEG_ACCOUNT_2_*`, and later `LSEG_ACCOUNT_3_*` if another account is added. Keep passwords out of `.env`; the runner relies on profile login state and does not read password variables.
+Log in manually in both Chrome windows. Each window must use a different LSEG account and a different Chrome profile. For local machine settings, copy `.env.example` to `.env` and set numbered account entries such as `LSEG_ACCOUNT_1_*`, `LSEG_ACCOUNT_2_*`, and later `LSEG_ACCOUNT_3_*` if another account is added. Keep passwords out of `.env`; the runner relies on profile login state and does not read password variables. If the first account is continuing a same-day single-account run, set `LSEG_ACCOUNT_1_INHERIT_UNTAGGED_USAGE=true` so its page budget includes legacy records that do not yet have `accountId`.
 
 ## Configuration
 
@@ -89,6 +89,10 @@ Run a parallel dry run:
 npm run automation:parallel:preflight
 npm run automation:parallel:dry-run -- --max-tasks 5
 ```
+
+`preflight` must report `state=query` for every account before any filter initialization or task run. The runner also checks query mode immediately before applying the required Research Next filters.
+
+The `filters.max_pages` value is enforced again at the final row-review step before any checkbox is selected. Adding a Research Next UI-side page-count filter during initialization is a future hardening item, not the budget or selection safety boundary.
 
 Start a parallel live run after both browser windows are logged in:
 

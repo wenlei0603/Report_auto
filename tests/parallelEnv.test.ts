@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applyEnvAccounts, buildParallelAccountSpecs, parseDotEnv } from "../src/runtime/parallelEnv.js";
+import { accountReadyForFilterConfiguration, applyEnvAccounts, buildParallelAccountSpecs, parseDotEnv } from "../src/runtime/parallelEnv.js";
 import type { LsegConfig } from "../src/config.js";
 
 describe("parseDotEnv", () => {
@@ -23,6 +23,7 @@ describe("parallel accounts from env", () => {
       LSEG_ACCOUNT_1_DAILY_PAGE_LIMIT: "700",
       LSEG_ACCOUNT_1_DOWNLOAD_DIR: "output/downloads/account_a",
       LSEG_ACCOUNT_1_PROFILE_DIR: "D:/chrome-rpa-profile-account-a",
+      LSEG_ACCOUNT_1_INHERIT_UNTAGGED_USAGE: "true",
       LSEG_ACCOUNT_2_ID: "account_b",
       LSEG_ACCOUNT_2_CDP_ENDPOINT: "http://127.0.0.1:9223",
       LSEG_ACCOUNT_2_DAILY_PAGE_LIMIT: "700",
@@ -62,6 +63,7 @@ describe("parallel accounts from env", () => {
       LSEG_ACCOUNT_1_DAILY_PAGE_LIMIT: "700",
       LSEG_ACCOUNT_1_DOWNLOAD_DIR: "output/downloads/account_a",
       LSEG_ACCOUNT_1_PROFILE_DIR: "D:/chrome-rpa-profile-account-a",
+      LSEG_ACCOUNT_1_INHERIT_UNTAGGED_USAGE: "true",
       LSEG_ACCOUNT_2_ID: "account_b",
       LSEG_ACCOUNT_2_CDP_ENDPOINT: "http://127.0.0.1:9223",
       LSEG_ACCOUNT_2_DAILY_PAGE_LIMIT: "700",
@@ -71,6 +73,17 @@ describe("parallel accounts from env", () => {
 
     expect(updated.accounts?.map((account) => account.id)).toEqual(["account_a", "account_b"]);
     expect(updated.accounts?.[1]?.download_dir).toBe("output/downloads/account_b");
+    expect(updated.accounts?.[0]?.inherit_untagged_usage).toBe(true);
+    expect(updated.accounts?.[1]?.inherit_untagged_usage).toBeUndefined();
+  });
+});
+
+describe("accountReadyForFilterConfiguration", () => {
+  test("allows filter configuration only from query state", () => {
+    expect(accountReadyForFilterConfiguration({ state: "query" })).toBe(true);
+    expect(accountReadyForFilterConfiguration({ state: "results" })).toBe(false);
+    expect(accountReadyForFilterConfiguration({ state: "unknown" })).toBe(false);
+    expect(accountReadyForFilterConfiguration(undefined)).toBe(false);
   });
 });
 

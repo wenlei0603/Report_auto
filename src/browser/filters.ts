@@ -60,7 +60,8 @@ export function evaluateSearchFilterInitialization(state: SearchFilterInitializa
   if (state.preferredContributorChecked) {
     reasons.push("preferred_contributor_checked");
   }
-  if (!normalizeText(state.dateRangeMode).includes("custom")) {
+  const dateRangeMode = normalizeText(state.dateRangeMode);
+  if (!dateRangeMode.includes("custom") || dateRangeMode.includes("last 90 days")) {
     reasons.push("date_range_not_custom");
   }
   const industryLabels = state.industryLabels.map(normalizeText).filter(Boolean);
@@ -417,7 +418,7 @@ export async function initializeSearchFilters(scope: AutomationScope, config: Ls
   const snapshot = await readSearchFilterInitializationState(scope);
   const validation = evaluateSearchFilterInitialization({
     ...snapshot,
-    dateRangeMode: dateResult.mode || snapshot.dateRangeMode
+    dateRangeMode: snapshot.dateRangeMode
   });
   return {
     ok: validation.ok,
@@ -432,29 +433,63 @@ export async function initializeSearchFilters(scope: AutomationScope, config: Ls
 }
 
 async function ensureDateRangeCustomMode(scope: AutomationScope): Promise<{ ok: boolean; mode: string; reason: string }> {
-  const page = owningPage(scope);
-  const result = await scope.evaluate(() => {
-    const root = document.querySelector("app-date-range-filter");
-    if (!root) {
-      return { ok: false, mode: "", reason: "no_date_range_filter" };
-    }
+  const before = await selectedDateRangeMode(scope);
+  if (normalizeText(before).includes("custom")) {
+    return { ok: true, mode: before, reason: "already_custom" };
+  }
+  const opened = await openCustomDatePicker(scope);
+  if (!opened) {
+    await forceSelectCustomDateRangeMode(scope);
+  }
+  const after = await selectedDateRangeMode(scope);
+  return {
+    ok: normalizeText(after).includes("custom"),
+    mode: after,
+    reason: opened ? "custom_clicked" : "custom_forced"
+  };
+}
 
-    const text = String(root.textContent ?? "");
-    if (/custom/i.test(text) && !/last\s*90\s*days/i.test(text)) {
-      return { ok: true, mode: "Custom", reason: "already_custom" };
-    }
+async function selectedDateRangeMode(scope: AutomationScope): Promise<string> {
+  return scope
+    .evaluate(
+      () =>
+        [...document.querySelectorAll("app-date-range-filter coral-select coral-item[selected]")]
+          .map((item) => String(item.textContent ?? "").trim())
+          .find(Boolean) ?? ""
+    )
+    .catch(() => "");
+}
 
-    (root.querySelector("coral-select") as HTMLElement | null)?.click();
-    const custom = [...root.querySelectorAll("coral-item")].find((item) => /custom/i.test((item.textContent ?? "").trim()));
-    if (custom instanceof HTMLElement) {
-      custom.click();
-      return { ok: true, mode: "Custom", reason: "custom_clicked" };
+async function forceSelectCustomDateRangeMode(scope: AutomationScope): Promise<void> {
+  await scope.evaluate(() => {
+    const select = document.querySelector("app-date-range-filter coral-select") as any;
+    if (!select) {
+      return;
     }
-    return { ok: false, mode: text.trim(), reason: "custom_option_not_found" };
+    const items = [...select.querySelectorAll("coral-item")];
+    const custom = items.find((item) => /custom/i.test((item.textContent ?? "").trim())) as any;
+    if (!custom) {
+      return;
+    }
+    for (const item of items) {
+      item.removeAttribute("selected");
+    }
+    custom.setAttribute("selected", "");
+    select.value = custom.value || "Custom";
+    select.selectedIndex = items.indexOf(custom);
+    select.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    select.dispatchEvent(new CustomEvent("coral-select:change", { bubbles: true, composed: true, detail: { value: select.value } }));
   });
-  await page.waitForTimeout(250);
-  await closePopupDialogs(scope);
-  return result;
+}
+
+export function dateSummaryMatchesRange(summary: string, fromText: string, toText: string): boolean {
+  const normalizedSummary = normalizeDateSummaryText(summary);
+  return normalizedSummary.includes(normalizeDateSummaryText(fromText)) && normalizedSummary.includes(normalizeDateSummaryText(toText));
+}
+
+function normalizeDateSummaryText(value: string): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 async function readSearchFilterInitializationState(scope: AutomationScope): Promise<SearchFilterInitializationState> {
@@ -479,7 +514,10 @@ async function readSearchFilterInitializationState(scope: AutomationScope): Prom
       return {
         contributorLabels: selectedLabels("app-contributors-filter app-multi-select emerald-multi-select"),
         preferredContributorChecked,
-        dateRangeMode: String(document.querySelector("app-date-range-filter")?.textContent ?? ""),
+        dateRangeMode:
+          [...document.querySelectorAll("app-date-range-filter coral-select coral-item[selected]")]
+            .map((item) => String(item.textContent ?? "").trim())
+            .find(Boolean) ?? String(document.querySelector("app-date-range-filter")?.textContent ?? ""),
         industryLabels: selectedLabels("app-industry-filter emerald-multi-select"),
         countryLabels: selectedLabels("app-regions-filter emerald-multi-select")
       };
@@ -1025,39 +1063,41 @@ async function setCustomDateRange(scope: AutomationScope, dateFrom: string, date
   const fromText = formatPickerDate(dateFrom);
   const toText = formatPickerDate(dateTo);
 
-  const opened = await scope.evaluate(() => {
-    const root = document.querySelector("app-date-range-filter");
-    if (!root) return false;
-    (root.querySelector("coral-select") as HTMLElement | null)?.click();
-    const custom = [...root.querySelectorAll("coral-item")].find((item) => /custom/i.test((item.textContent ?? "").trim()));
-    if (custom instanceof HTMLElement) {
-      custom.click();
-      return true;
-    }
-    return false;
-  });
+  const opened = await openCustomDatePicker(scope);
   if (!opened) {
     return [false, false];
   }
-  await page.waitForTimeout(350);
 
-  const focused = await scope.evaluate(() => {
+  const applied = await scope.evaluate(
+    ({ fromText, toText }) => {
     const picker = document.querySelector("app-date-range-filter emerald-datetime-picker") as any;
-    const input = picker?.shadowRoot?.querySelector("#input") as HTMLElement | null;
-    input?.focus();
-    return Boolean(input);
-  });
-  if (!focused) {
+      if (!picker?.shadowRoot) {
+        return false;
+      }
+      const setField = (selector: string, value: string) => {
+        const field = picker.shadowRoot.querySelector(selector) as any;
+        const input = field?.shadowRoot?.querySelector("input") as HTMLInputElement | null;
+        if (!input) {
+          return false;
+        }
+        input.focus();
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        return true;
+      };
+      const okFrom = setField("#input", fromText);
+      const okTo = setField("#input-to", toText);
+      picker.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      picker.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      picker.dispatchEvent(new CustomEvent("confirm", { bubbles: true, composed: true }));
+      return okFrom && okTo;
+    },
+    { fromText, toText }
+  );
+  if (!applied) {
     return [false, false];
   }
-
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.type(fromText, { delay: 12 });
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.type(toText, { delay: 12 });
 
   await scope.evaluate(() => {
     const panel = document.querySelector("app-date-range-filter app-date-picker-popup coral-popup-panel.popup-dialog");
@@ -1069,6 +1109,72 @@ async function setCustomDateRange(scope: AutomationScope, dateFrom: string, date
   const summary = await scope.evaluate(
     () => (document.querySelector("app-date-range-filter .date-range-filter__date-summary")?.textContent ?? "").trim()
   );
-  const ok = summary.includes(fromText) && summary.includes(toText);
+  const ok = dateSummaryMatchesRange(summary, fromText, toText);
   return [ok, ok];
+}
+
+async function openCustomDatePicker(scope: AutomationScope): Promise<boolean> {
+  const page = owningPage(scope);
+  if (await hasVisibleCustomDatePicker(scope)) {
+    return true;
+  }
+  try {
+    await clickDateRangeOption(scope, /Last 90 Days/i, true);
+    await page.waitForTimeout(250);
+    await clickDateRangeOption(scope, /Custom/i, false);
+    await page.waitForTimeout(700);
+  } catch {
+    return false;
+  }
+
+  return hasVisibleCustomDatePicker(scope);
+}
+
+async function clickDateRangeOption(scope: AutomationScope, option: RegExp, optional: boolean): Promise<boolean> {
+  const page = owningPage(scope);
+  try {
+    await scope.locator("app-date-range-filter coral-select").first().click({ timeout: 3000 });
+    await page.waitForTimeout(250);
+    const item = scope.locator("app-date-range-filter coral-item").filter({ hasText: option }).first();
+    await item.click({ timeout: 3000 });
+    return true;
+  } catch {
+    const clicked = await clickDateRangeOptionByCoordinates(scope, option);
+    if (clicked || optional) {
+      return clicked;
+    }
+    throw new Error(`Date range option not clickable: ${String(option)}`);
+  }
+}
+
+async function clickDateRangeOptionByCoordinates(scope: AutomationScope, option: RegExp): Promise<boolean> {
+  const page = owningPage(scope);
+  const selectBox = await scope.locator("app-date-range-filter coral-select").first().boundingBox().catch(() => null);
+  if (!selectBox) {
+    return false;
+  }
+  await page.mouse.click(selectBox.x + selectBox.width / 2, selectBox.y + selectBox.height / 2);
+  await page.waitForTimeout(250);
+  const box = await scope
+    .locator("app-date-range-filter coral-item")
+    .filter({ hasText: option })
+    .first()
+    .boundingBox()
+    .catch(() => null);
+  if (!box) {
+    return false;
+  }
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  return true;
+}
+
+async function hasVisibleCustomDatePicker(scope: AutomationScope): Promise<boolean> {
+  return scope.evaluate(() => {
+    const picker = document.querySelector("app-date-range-filter emerald-datetime-picker");
+    if (!picker) {
+      return false;
+    }
+    const rect = picker.getBoundingClientRect();
+    return rect.width > 2 && rect.height > 2;
+  });
 }

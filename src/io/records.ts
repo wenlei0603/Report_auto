@@ -49,12 +49,17 @@ const TERMINAL_STATUSES = new Set<FinalTaskStatus>([
 
 const PAGE_ACCOUNTING_STATUSES = new Set<FinalTaskStatus>(["download_started", "downloaded"]);
 
+interface RecordStoreOptions {
+  includeUntaggedPagesForAccountId?: string;
+}
+
 export class RecordStore {
   constructor(
     private readonly mappingCsv: string,
     private readonly statusJsonl: string,
     private readonly progressCsv: string,
-    private readonly dayPageLimit: number
+    private readonly dayPageLimit: number,
+    private readonly options: RecordStoreOptions = {}
   ) {}
 
   async initialize(): Promise<void> {
@@ -75,9 +80,9 @@ export class RecordStore {
     return dailyPageUsage(records, runDate);
   }
 
-  async dailyPagesForAccount(accountId: string, runDate = todayIso()): Promise<number> {
+  async dailyPagesForAccount(accountId: string, runDate = todayIso(), options: { includeUntagged?: boolean } = {}): Promise<number> {
     const records = await readJsonl<TaskStatusRecord>(this.statusJsonl);
-    return dailyPageUsageForAccount(records, runDate, accountId);
+    return dailyPageUsageForAccount(records, runDate, accountId, options);
   }
 
   async writeStatus(input: {
@@ -88,6 +93,7 @@ export class RecordStore {
     note: string;
     pageUrl: string;
     artifacts?: DownloadArtifact[];
+    includeUntaggedPages?: boolean;
   }): Promise<TaskStatusRecord> {
     const runDate = todayIso();
     const existingRecords = await readJsonl<TaskStatusRecord>(this.statusJsonl);
@@ -109,8 +115,11 @@ export class RecordStore {
       pageUrl: input.pageUrl,
       artifacts: input.artifacts ?? []
     };
+    const includeUntaggedPages =
+      input.includeUntaggedPages ||
+      Boolean(record.accountId && this.options.includeUntaggedPagesForAccountId === record.accountId);
     record.dailyTotalPages = record.accountId
-      ? dailyPageUsageForAccount([...existingRecords, record], runDate, record.accountId)
+      ? dailyPageUsageForAccount([...existingRecords, record], runDate, record.accountId, { includeUntagged: includeUntaggedPages })
       : dailyPageUsage([...existingRecords, record], runDate);
     await appendJsonl(this.statusJsonl, record);
     await appendCsvRow(this.progressCsv, [
@@ -167,8 +176,13 @@ function dailyPageUsage(records: TaskStatusRecord[], runDate: string): number {
   return [...latestAccountingRecordByTask(records, runDate).values()].reduce((sum, record) => sum + Math.max(0, record.pages || 0), 0);
 }
 
-function dailyPageUsageForAccount(records: TaskStatusRecord[], runDate: string, accountId: string): number {
-  return [...latestAccountingRecordByTaskForAccount(records, runDate, accountId).values()].reduce(
+function dailyPageUsageForAccount(
+  records: TaskStatusRecord[],
+  runDate: string,
+  accountId: string,
+  options: { includeUntagged?: boolean } = {}
+): number {
+  return [...latestAccountingRecordByTaskForAccount(records, runDate, accountId, options).values()].reduce(
     (sum, record) => sum + Math.max(0, record.pages || 0),
     0
   );
@@ -185,10 +199,16 @@ function latestAccountingRecordByTask(records: TaskStatusRecord[], runDate: stri
   return latest;
 }
 
-function latestAccountingRecordByTaskForAccount(records: TaskStatusRecord[], runDate: string, accountId: string): Map<string, TaskStatusRecord> {
+function latestAccountingRecordByTaskForAccount(
+  records: TaskStatusRecord[],
+  runDate: string,
+  accountId: string,
+  options: { includeUntagged?: boolean } = {}
+): Map<string, TaskStatusRecord> {
   const latest = new Map<string, TaskStatusRecord>();
   for (const record of records) {
-    if (record.runDate !== runDate || !PAGE_ACCOUNTING_STATUSES.has(record.status) || record.accountId !== accountId) {
+    const accountMatches = record.accountId === accountId || (options.includeUntagged && !record.accountId);
+    if (record.runDate !== runDate || !PAGE_ACCOUNTING_STATUSES.has(record.status) || !accountMatches) {
       continue;
     }
     latest.set(record.taskId, record);

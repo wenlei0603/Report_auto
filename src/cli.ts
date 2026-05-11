@@ -4,6 +4,11 @@ import { loadConfig } from "./config.js";
 import { inspectCurrentBrowser, runAutomation } from "./automation/engine.js";
 import { runParallelAutomation } from "./automation/parallelEngine.js";
 import { applyEnvAccounts, buildParallelPreflightResult, loadDotEnv, mergedLocalEnv } from "./runtime/parallelEnv.js";
+import { openBrowserSession } from "./browser/session.js";
+import { waitForResearchScope } from "./browser/scope.js";
+import { classifyAppState } from "./browser/state.js";
+import { configForAccount, normalizeAccounts, type LsegConfig } from "./config.js";
+import { RunLogger } from "./io/runLogger.js";
 
 const program = new Command();
 
@@ -61,10 +66,12 @@ program
     const env = mergedLocalEnv(dotEnv);
     const config = applyEnvAccounts(await loadConfig(rootOptions.config), env);
     const result = await buildParallelPreflightResult(config, env);
+    const accountStates = await inspectParallelAccountStates(config);
     process.stdout.write(`Parallel preflight accounts=${result.accounts.length}\n`);
     for (const account of result.accounts) {
       const profile = "profile_dir" in account && account.profile_dir ? "profile configured" : "profile not configured";
-      process.stdout.write(`- ${account.id}: ${account.cdp_endpoint}; ${profile}\n`);
+      const state = accountStates.get(account.id);
+      process.stdout.write(`- ${account.id}: ${account.cdp_endpoint}; ${profile}; state=${state?.state ?? "unavailable"}; reason=${state?.reason ?? ""}\n`);
     }
     if (result.passwordKeysIgnored.length) {
       process.stdout.write(`Ignored secret-like env keys: ${result.passwordKeysIgnored.length}\n`);
@@ -74,6 +81,13 @@ program
         process.stderr.write(`ERROR ${issue}\n`);
       }
       process.exitCode = 1;
+    }
+    for (const account of result.accounts) {
+      const state = accountStates.get(account.id);
+      if (state?.state !== "query") {
+        process.stderr.write(`ERROR ${account.id}: Research Next is not in query mode; current state=${state?.state ?? "unavailable"}\n`);
+        process.exitCode = 1;
+      }
     }
   });
 
@@ -95,6 +109,27 @@ program.parseAsync().catch((error: unknown) => {
 async function loadConfigWithLocalEnv(configPath: string) {
   const dotEnv = await loadDotEnv();
   return applyEnvAccounts(await loadConfig(configPath), mergedLocalEnv(dotEnv));
+}
+
+async function inspectParallelAccountStates(config: LsegConfig): Promise<Map<string, { state: string; reason: string }>> {
+  const states = new Map<string, { state: string; reason: string }>();
+  for (const account of normalizeAccounts(config)) {
+    const accountConfig = configForAccount(config, account);
+    const logger = new RunLogger(accountConfig.run_log_jsonl);
+    try {
+      const session = await openBrowserSession(accountConfig, logger);
+      try {
+        await waitForResearchScope(session.page, accountConfig, logger);
+        const state = await classifyAppState(session.page, accountConfig);
+        states.set(account.id, { state: state.state, reason: state.reason });
+      } finally {
+        await session.browser.close().catch(() => undefined);
+      }
+    } catch (error) {
+      states.set(account.id, { state: "unavailable", reason: String(error) });
+    }
+  }
+  return states;
 }
 
 function parsePositiveInt(value: string): number {
