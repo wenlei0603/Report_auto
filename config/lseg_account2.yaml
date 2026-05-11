@@ -1,19 +1,19 @@
 workspace_url: "https://workspace.refinitiv.com/web/Apps/research-next/?st=OAPermID#/?st=OAPermID"
 input_file: "lseg_request_by_call_2015_2018_end_plus_7d.txt"
-download_dir: "output/downloads"
-mapping_csv: "output/task_file_mapping.csv"
-status_log_jsonl: "logs/task_status.jsonl"
-progress_csv: "output/task_progress.csv"
-run_log_jsonl: "logs/run_log.jsonl"
+download_dir: "output_account2/downloads"
+mapping_csv: "output_account2/task_file_mapping.csv"
+status_log_jsonl: "logs_account2/task_status.jsonl"
+progress_csv: "output_account2/task_progress.csv"
+run_log_jsonl: "logs_account2/run_log.jsonl"
 daily_page_limit: 700
 max_downloads: 1
-cdp_endpoint: "http://127.0.0.1:9222"
+cdp_endpoint: "http://127.0.0.1:9223"
 
 browser:
   headless: false
   slow_mo_ms: 100
   fallback_channel: "chrome"
-  user_data_dir: "D:/chrome-rpa-profile"
+  user_data_dir: "D:/chrome-rpa-profile-2"
 
 filters:
   contributor: "Morgan Stanley"
