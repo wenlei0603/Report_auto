@@ -6,7 +6,7 @@ describe("result row review", () => {
     const review = evaluateResultRow(
       {
         rowIndex: 2,
-        dateText: "25-Jul-2017",
+        dateText: "26-Jul-2017",
         availableText: "01-Aug-2017, 12:20",
         companyName: "3M Co",
         companyExtraCount: 0,
@@ -31,6 +31,37 @@ describe("result row review", () => {
     expect(review.needsHumanReview).toBe(false);
     expect(review.autoSelect).toBe(true);
     expect(review.downloadCategory).toBe("ticker_matched");
+  });
+
+  it("rejects same-day rows even when they otherwise match", () => {
+    const review = evaluateResultRow(
+      {
+        rowIndex: 2,
+        dateText: "25-Jul-2017",
+        availableText: "01-Aug-2017, 12:20",
+        companyName: "3M Co",
+        companyExtraCount: 0,
+        tickerText: "MMM.N",
+        tickerExtraCount: 0,
+        titleText: "3M Co.: Comments Ahead of the Call",
+        pagesText: "10",
+        contributorText: "Morgan Stanley"
+      },
+      {
+        company: "3M Co",
+        ticker: "MMM",
+        ccDate: "2017-07-25",
+        dateFrom: "2017-07-25",
+        dateTo: "2017-08-08",
+        contributor: "Morgan Stanley",
+        maxPages: 23
+      }
+    );
+
+    expect(review.eligible).toBe(false);
+    expect(review.autoSelect).toBe(false);
+    expect(review.downloadCategory).toBe("none");
+    expect(review.reasons).toContain("date_is_cc_date");
   });
 
   it("classifies broad basket rows as ticker-mismatch downloads when company and dates pass", () => {
@@ -245,7 +276,7 @@ describe("result row review", () => {
         },
         {
           rowIndex: 2,
-          dateText: "25-Jul-2017",
+          dateText: "26-Jul-2017",
           availableText: "01-Aug-2017, 12:20",
           companyName: "3M Co",
           companyExtraCount: 0,
@@ -274,6 +305,74 @@ describe("result row review", () => {
     expect(summary.rejectedRowIndexes).toEqual([]);
   });
 
+  it("limits auto-selection to the two closest non-same-day rows after cc-date", () => {
+    const summary = reviewResultRows(
+      [
+        {
+          rowIndex: 0,
+          dateText: "25-Jul-2017",
+          availableText: "26-Jul-2017, 09:00",
+          companyName: "3M Co",
+          companyExtraCount: 0,
+          tickerText: "MMM.N",
+          tickerExtraCount: 0,
+          titleText: "3M Co. day-of note",
+          pagesText: "10",
+          contributorText: "Morgan Stanley"
+        },
+        {
+          rowIndex: 1,
+          dateText: "26-Jul-2017",
+          availableText: "26-Jul-2017, 10:00",
+          companyName: "3M Co",
+          companyExtraCount: 0,
+          tickerText: "MMM.N",
+          tickerExtraCount: 0,
+          titleText: "3M Co. first follow-up",
+          pagesText: "8",
+          contributorText: "Morgan Stanley"
+        },
+        {
+          rowIndex: 2,
+          dateText: "27-Jul-2017",
+          availableText: "27-Jul-2017, 10:00",
+          companyName: "3M Co",
+          companyExtraCount: 0,
+          tickerText: "MMM.N",
+          tickerExtraCount: 0,
+          titleText: "3M Co. second follow-up",
+          pagesText: "9",
+          contributorText: "Morgan Stanley"
+        },
+        {
+          rowIndex: 3,
+          dateText: "29-Jul-2017",
+          availableText: "29-Jul-2017, 10:00",
+          companyName: "3M Co",
+          companyExtraCount: 0,
+          tickerText: "MMM.N",
+          tickerExtraCount: 0,
+          titleText: "3M Co. later follow-up",
+          pagesText: "11",
+          contributorText: "Morgan Stanley"
+        }
+      ],
+      {
+        company: "3M Co",
+        ticker: "MMM",
+        ccDate: "2017-07-25",
+        dateFrom: "2017-07-25",
+        dateTo: "2017-08-08",
+        contributor: "Morgan Stanley",
+        maxPages: 23
+      }
+    );
+
+    expect(summary.autoSelectRowIndexes).toEqual([1, 2]);
+    expect(summary.tickerMatchedRowIndexes).toEqual([1, 2]);
+    expect(summary.rejectedRowIndexes).toEqual([0]);
+  });
+
   it("prioritizes ticker-mismatch category for T0065-style rows while retaining strict rows separately", () => {
     const summary = reviewResultRows(
       [
@@ -291,7 +390,7 @@ describe("result row review", () => {
         },
         {
           rowIndex: 5,
-          dateText: "22-Apr-2015",
+          dateText: "23-Apr-2015",
           availableText: "29-Apr-2015, 12:22",
           companyName: "Abbott Laboratories",
           companyExtraCount: 0,

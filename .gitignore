@@ -8,7 +8,10 @@ test-results/
 everything-claude-code-ssh/
 Pastproject/
 logs/*.jsonl
+logs_account2/*.jsonl
 output/downloads/
+output_account2/downloads/
 output/debug/
 output/*.csv
+output_account2/*.csv
 *.tsbuildinfo

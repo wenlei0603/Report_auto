@@ -52,7 +52,8 @@ const ConfigSchema = z.object({
     app_restart_attempts: z.number().int().min(0),
     recover_from_batchsaveprint: z.boolean(),
     require_download_artifacts: z.boolean(),
-    debug_max_tasks: z.number().int().min(0)
+    debug_max_tasks: z.number().int().min(0),
+    stop_on_page_limit: z.boolean().default(true)
   }),
   selectors: SelectorsSchema
 });

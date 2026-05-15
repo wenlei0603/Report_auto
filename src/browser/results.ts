@@ -1,4 +1,4 @@
-import { addDaysIso, compareIsoDates, parseDateToIso } from "../domain/dates.js";
+import { addDaysIso, compareIsoDates, differenceInDaysIso, parseDateToIso } from "../domain/dates.js";
 import type { LsegConfig } from "../config.js";
 import type { AutomationScope } from "./types.js";
 
@@ -44,6 +44,7 @@ export interface ResultRowsReview {
 }
 
 const GENERIC_COMPANY_WORDS = new Set(["co", "inc", "corp", "ltd", "company", "plc", "nv", "sa", "ag", "se"]);
+const MAX_AUTO_SELECT_ROWS = 2;
 
 function dateTextIso(dateText: string): string {
   const head = dateText.split(",")[0]!.trim();
@@ -123,6 +124,9 @@ export function evaluateResultRow(
     if (compareIsoDates(rowDateIso, task.dateFrom) < 0 || compareIsoDates(rowDateIso, task.dateTo) > 0) {
       hardReasons.push("date_out_of_range");
     }
+    if (task.ccDate && compareIsoDates(rowDateIso, task.ccDate) === 0) {
+      hardReasons.push("date_is_cc_date");
+    }
     if (compareIsoDates(rowDateIso, eventWindow.from) < 0 || compareIsoDates(rowDateIso, eventWindow.to) > 0) {
       hardReasons.push("date_out_of_event_window");
     }
@@ -188,15 +192,85 @@ export function evaluateResultRow(
 
 export function reviewResultRows(rows: ResultRowSnapshot[], task: ResultReviewTask): ResultRowsReview {
   const reviews = rows.map((row) => ({ ...row, review: evaluateResultRow(row, task) }));
+  const selectedRowIndexes = new Set(
+    reviews
+      .filter((row) => row.review.autoSelect)
+      .sort((a, b) => compareAutoSelectPriority(a, b, task))
+      .slice(0, MAX_AUTO_SELECT_ROWS)
+      .map((row) => row.rowIndex)
+  );
+  const limitedReviews = reviews.map((row) => {
+    if (!row.review.autoSelect || selectedRowIndexes.has(row.rowIndex)) {
+      return row;
+    }
+    return {
+      ...row,
+      review: {
+        ...row.review,
+        autoSelect: false,
+        reasons: [...row.review.reasons, "selection_rank_exceeded"]
+      }
+    };
+  });
   return {
     inspectableRows: rows.length,
-    autoSelectRowIndexes: reviews.filter((row) => row.review.autoSelect).map((row) => row.rowIndex),
-    tickerMatchedRowIndexes: reviews.filter((row) => row.review.downloadCategory === "ticker_matched").map((row) => row.rowIndex),
-    tickerMismatchRowIndexes: reviews.filter((row) => row.review.downloadCategory === "ticker_mismatch").map((row) => row.rowIndex),
-    humanReviewRowIndexes: reviews.filter((row) => row.review.eligible && row.review.needsHumanReview).map((row) => row.rowIndex),
-    rejectedRowIndexes: reviews.filter((row) => !row.review.eligible).map((row) => row.rowIndex),
-    reviews
+    autoSelectRowIndexes: limitedReviews.filter((row) => row.review.autoSelect).map((row) => row.rowIndex),
+    tickerMatchedRowIndexes: limitedReviews
+      .filter((row) => row.review.autoSelect && row.review.downloadCategory === "ticker_matched")
+      .map((row) => row.rowIndex),
+    tickerMismatchRowIndexes: limitedReviews
+      .filter((row) => row.review.autoSelect && row.review.downloadCategory === "ticker_mismatch")
+      .map((row) => row.rowIndex),
+    humanReviewRowIndexes: limitedReviews.filter((row) => row.review.eligible && row.review.needsHumanReview).map((row) => row.rowIndex),
+    rejectedRowIndexes: limitedReviews.filter((row) => !row.review.eligible).map((row) => row.rowIndex),
+    reviews: limitedReviews
   };
+}
+
+function compareAutoSelectPriority(
+  a: ResultRowsReview["reviews"][number],
+  b: ResultRowsReview["reviews"][number],
+  task: ResultReviewTask
+): number {
+  const distanceDelta = autoSelectDistance(a, task) - autoSelectDistance(b, task);
+  if (distanceDelta !== 0) {
+    return distanceDelta;
+  }
+
+  const categoryDelta = autoSelectCategoryRank(a.review.downloadCategory) - autoSelectCategoryRank(b.review.downloadCategory);
+  if (categoryDelta !== 0) {
+    return categoryDelta;
+  }
+
+  const rowDateDelta = compareRowDates(a, b);
+  if (rowDateDelta !== 0) {
+    return rowDateDelta;
+  }
+
+  return a.rowIndex - b.rowIndex;
+}
+
+function autoSelectDistance(row: ResultRowsReview["reviews"][number], task: ResultReviewTask): number {
+  if (!task.ccDate) {
+    return Number.POSITIVE_INFINITY;
+  }
+  try {
+    return Math.abs(differenceInDaysIso(dateTextIso(row.dateText), task.ccDate));
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function autoSelectCategoryRank(category: ResultRowReview["downloadCategory"]): number {
+  return category === "ticker_matched" ? 0 : category === "ticker_mismatch" ? 1 : 2;
+}
+
+function compareRowDates(a: ResultRowsReview["reviews"][number], b: ResultRowsReview["reviews"][number]): number {
+  try {
+    return compareIsoDates(dateTextIso(a.dateText), dateTextIso(b.dateText));
+  } catch {
+    return 0;
+  }
 }
 
 export function eventWindowForTask(task: Pick<ResultReviewTask, "ccDate" | "dateFrom" | "dateTo">): { from: string; to: string } {
@@ -208,19 +282,20 @@ export function eventWindowForTask(task: Pick<ResultReviewTask, "ccDate" | "date
 
 export async function extractVisibleResultRows(scope: AutomationScope): Promise<ResultRowSnapshot[]> {
   return scope
-    .evaluate(() => {
+    .evaluate(async () => {
       const clean = (el: Element | undefined) => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
       const stripExtraCount = (text: string) => text.replace(/\+\d+\s*$/, "").trim();
       const extraCount = (text: string) => {
         const match = text.match(/\+(\d+)\s*$/);
         return match ? Number.parseInt(match[1]!, 10) : 0;
       };
+      const countNumericCells = (values: string[]) =>
+        values.filter((value) => /^\d{1,3}$/.test(value.trim())).length;
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-      for (const grid of [...document.querySelectorAll("app-main-grid emerald-grid, emerald-grid")]) {
-        const root = grid.shadowRoot;
-        if (!root) {
-          continue;
-        }
+      const collectRows = (
+        root: ShadowRoot
+      ): { rows: ResultRowSnapshot[]; rowCount: number } | null => {
         const headers = [...root.querySelectorAll(".tr-lg.title .grid-pane.columns .column")].map((el) =>
           clean(el).toLowerCase()
         );
@@ -235,7 +310,7 @@ export async function extractVisibleResultRows(scope: AutomationScope): Promise<
           contributor: headers.findIndex((header) => header.includes("contributor"))
         };
         if (indexes.date < 0 || indexes.company < 0 || indexes.title < 0 || indexes.pages < 0 || indexes.contributor < 0) {
-          continue;
+          return null;
         }
 
         const valuesByColumn = columns.map((column) =>
@@ -243,6 +318,27 @@ export async function extractVisibleResultRows(scope: AutomationScope): Promise<
             .filter((child) => child.classList.contains("cell"))
             .map((cell) => clean(cell))
         );
+        const sampledRows = Math.min(30, Math.max(0, ...valuesByColumn.map((values) => values.length)));
+        const pageHeaderIdx = indexes.pages;
+        if (pageHeaderIdx >= 0) {
+          const headerValues = valuesByColumn[pageHeaderIdx]?.slice(0, sampledRows) ?? [];
+          const headerNumeric = countNumericCells(headerValues);
+          if (headerNumeric === 0 && sampledRows > 0) {
+            let bestIdx = pageHeaderIdx;
+            let bestNumeric = 0;
+            for (let i = 0; i < valuesByColumn.length; i += 1) {
+              const numeric = countNumericCells((valuesByColumn[i] ?? []).slice(0, sampledRows));
+              if (numeric > bestNumeric) {
+                bestNumeric = numeric;
+                bestIdx = i;
+              }
+            }
+            if (bestNumeric > 0) {
+              indexes.pages = bestIdx;
+            }
+          }
+        }
+
         const rowCount = Math.max(0, ...valuesByColumn.map((values) => values.length));
         const rows: ResultRowSnapshot[] = [];
         for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
@@ -260,12 +356,67 @@ export async function extractVisibleResultRows(scope: AutomationScope): Promise<
             pagesText: valuesByColumn[indexes.pages]?.[rowIndex] ?? "",
             contributorText: valuesByColumn[indexes.contributor]?.[rowIndex] ?? ""
           };
-          if (row.dateText || row.titleText || row.companyName) {
+          if (
+            row.dateText ||
+            row.titleText ||
+            row.companyName ||
+            row.pagesText ||
+            row.contributorText ||
+            row.tickerText
+          ) {
             rows.push(row);
           }
         }
-        if (rows.length > 0) {
-          return rows;
+        return { rows, rowCount };
+      };
+
+      const scrollHorizontally = (root: ShadowRoot, toRight: boolean) => {
+        const scrollers = [
+          ...root.querySelectorAll<HTMLElement>(".tr-vlg.content .grid-pane, .tr-vlg.content .grid-pane.columns")
+        ].filter((el) => el.scrollWidth > el.clientWidth + 10);
+        for (const el of scrollers) {
+          el.scrollLeft = toRight ? el.scrollWidth : 0;
+        }
+      };
+
+      for (const grid of [...document.querySelectorAll("app-main-grid emerald-grid, emerald-grid")]) {
+        const root = grid.shadowRoot;
+        if (!root) {
+          continue;
+        }
+
+        const left = collectRows(root);
+        if (!left || left.rows.length === 0) {
+          continue;
+        }
+
+        let mergedRows = left.rows;
+        const leftPages = mergedRows.filter((row) => /^\d{1,3}$/.test(row.pagesText.trim())).length;
+        const leftContrib = mergedRows.filter((row) => row.contributorText.trim().length > 0).length;
+        if ((leftPages === 0 || leftContrib === 0) && left.rowCount > 0) {
+          scrollHorizontally(root, true);
+          await wait(120);
+          const right = collectRows(root);
+          if (right && right.rows.length > 0) {
+            const rightByIndex = new Map(right.rows.map((row) => [row.rowIndex, row]));
+            mergedRows = mergedRows.map((row) => {
+              const fallback = rightByIndex.get(row.rowIndex);
+              if (!fallback) {
+                return row;
+              }
+              return {
+                ...row,
+                pagesText: row.pagesText || fallback.pagesText,
+                contributorText: row.contributorText || fallback.contributorText
+              };
+            });
+          }
+          scrollHorizontally(root, false);
+          await wait(60);
+        }
+
+        if (mergedRows.length > 0) {
+          return mergedRows;
         }
       }
       return [];

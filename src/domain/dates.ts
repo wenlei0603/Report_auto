@@ -77,6 +77,14 @@ export function addDaysIso(isoDate: string, days: number): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
+export function differenceInDaysIso(a: string, b: string): number {
+  const [aYear, aMonth, aDay] = splitIsoDate(a);
+  const [bYear, bMonth, bDay] = splitIsoDate(b);
+  const aUtc = Date.UTC(aYear, aMonth - 1, aDay);
+  const bUtc = Date.UTC(bYear, bMonth - 1, bDay);
+  return Math.round((aUtc - bUtc) / 86_400_000);
+}
+
 export function timestampIso(): string {
   return new Date().toISOString();
 }
