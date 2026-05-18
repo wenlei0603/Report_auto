@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyUrl } from "../src/browser/state.js";
+import { classifyUrl, estimatePagesFromPageTexts } from "../src/browser/state.js";
 import { isQueryModeReady } from "../src/browser/filters.js";
 import { workspacePageRank } from "../src/browser/session.js";
 
@@ -68,5 +68,19 @@ describe("query mode readiness", () => {
         hasExpandedFilterPanel: false
       })
     ).toBe(false);
+  });
+});
+
+describe("page estimation", () => {
+  it("sums only parsed page-column values instead of scanning whole-page text", () => {
+    expect(estimatePagesFromPageTexts(["3", "2"])).toBe(5);
+  });
+
+  it("falls back to 1 when row page values are unavailable", () => {
+    expect(estimatePagesFromPageTexts(["", "N/A"])).toBe(1);
+  });
+
+  it("parses page values that still include the pages label", () => {
+    expect(estimatePagesFromPageTexts(["10 pages", "17 pages"])).toBe(27);
   });
 });

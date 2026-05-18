@@ -102,6 +102,24 @@ export function interpretResultVisibilitySignals(input: {
   return { status: "no_rows", rowCount: 0, reason: "no_result_rows" };
 }
 
+export function estimatePagesFromPageTexts(pageTexts: string[]): number {
+  const parsed = pageTexts
+    .map((value) => {
+      const match = String(value ?? "").match(/\b(\d+)\b/);
+      if (!match) {
+        return null;
+      }
+      const pages = Number.parseInt(match[1] ?? "", 10);
+      return Number.isFinite(pages) && pages > 0 ? pages : null;
+    })
+    .filter((value): value is number => value !== null);
+
+  if (parsed.length === 0) {
+    return 1;
+  }
+  return parsed.reduce((sum, value) => sum + value, 0);
+}
+
 function classifyText(text: string): AppState | null {
   if (/document information|save documents to pc|save to my pc/i.test(text)) {
     return "document_info";
@@ -116,12 +134,60 @@ function classifyText(text: string): AppState | null {
 }
 
 async function estimatePagesFromRows(scope: AutomationScope, _config: LsegConfig): Promise<number> {
-  const text = await safeBodyText(scope);
-  const matches = [...text.matchAll(/\b(\d+)\s*pages?\b/gi)];
-  if (matches.length === 0) {
-    return 1;
-  }
-  return matches.reduce((sum, match) => sum + Number(match[1]), 0);
+  const pageTexts = await scope
+    .evaluate(() => {
+      const clean = (el: Element | undefined) => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+      const countNumericCells = (values: string[]) =>
+        values.filter((value) => /^\d{1,3}$/.test(value.trim())).length;
+
+      for (const grid of [...document.querySelectorAll("app-main-grid emerald-grid, emerald-grid")]) {
+        const root = (grid as HTMLElement).shadowRoot;
+        if (!root) {
+          continue;
+        }
+
+        const headers = [...root.querySelectorAll(".tr-lg.title .grid-pane.columns .column")].map((el) =>
+          clean(el).toLowerCase()
+        );
+        const columns = [...root.querySelectorAll(".tr-vlg.content .grid-pane.columns .column")];
+        let pagesIndex = headers.findIndex((header) => header === "pages" || /^pages\b/.test(header));
+        if (pagesIndex < 0 || pagesIndex >= columns.length) {
+          continue;
+        }
+
+        const valuesByColumn = columns.map((column) =>
+          [...column.children]
+            .filter((child) => child.classList.contains("cell"))
+            .map((cell) => clean(cell))
+        );
+        const sampledRows = Math.min(30, Math.max(0, ...valuesByColumn.map((values) => values.length)));
+        const headerValues = valuesByColumn[pagesIndex]?.slice(0, sampledRows) ?? [];
+        const headerNumeric = countNumericCells(headerValues);
+        if (headerNumeric === 0 && sampledRows > 0) {
+          let bestIdx = pagesIndex;
+          let bestNumeric = 0;
+          for (let i = 0; i < valuesByColumn.length; i += 1) {
+            const numeric = countNumericCells((valuesByColumn[i] ?? []).slice(0, sampledRows));
+            if (numeric > bestNumeric) {
+              bestNumeric = numeric;
+              bestIdx = i;
+            }
+          }
+          if (bestNumeric > 0) {
+            pagesIndex = bestIdx;
+          }
+        }
+
+        const pageValues = (valuesByColumn[pagesIndex] ?? []).filter((value) => value.length > 0);
+        if (pageValues.length > 0) {
+          return pageValues;
+        }
+      }
+      return [] as string[];
+    })
+    .catch(() => []);
+
+  return estimatePagesFromPageTexts(pageTexts);
 }
 
 async function safeBodyText(scope: AutomationScope): Promise<string> {
