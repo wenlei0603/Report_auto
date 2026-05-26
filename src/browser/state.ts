@@ -46,6 +46,9 @@ export async function classifyResults(scope: AutomationScope, config: LsegConfig
     if (textState === "document_info") {
       return { status: "document_info", rowCount: 0, estimatedPages: 0, reason: "document_info_text" };
     }
+    if (textState === "auth") {
+      throw new Error("LSEG session is not authenticated: auth_text. Log in manually, then run again.");
+    }
     const hasNoResultsText = await anyVisible(scope, config.selectors.no_results_text);
     if (hasNoResultsText) {
       return { status: "no_results", rowCount: 0, estimatedPages: 0, reason: "no_results_text" };

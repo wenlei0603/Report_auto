@@ -2,6 +2,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import type { LsegConfig } from "../config.js";
 import type { RunLogger } from "../io/runLogger.js";
 import type { BrowserSession } from "./types.js";
+import { ensureUsableViewport } from "./viewport.js";
 
 export async function openBrowserSession(config: LsegConfig, logger: RunLogger): Promise<BrowserSession> {
   let browser: Browser | undefined;
@@ -32,6 +33,8 @@ export async function openBrowserSession(config: LsegConfig, logger: RunLogger):
     page = await context.newPage();
     await page.goto(config.workspace_url, { waitUntil: "domcontentloaded" });
   }
+
+  await ensureUsableViewport(page, logger);
 
   return { browser, context, page };
 }

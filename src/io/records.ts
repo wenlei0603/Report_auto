@@ -151,18 +151,34 @@ export class RecordStore {
 }
 
 function dailyPageUsage(records: TaskStatusRecord[], runDate: string): number {
-  return [...latestAccountingRecordByTask(records, runDate).values()].reduce((sum, record) => sum + Math.max(0, record.pages || 0), 0);
-}
-
-function latestAccountingRecordByTask(records: TaskStatusRecord[], runDate: string): Map<string, TaskStatusRecord> {
-  const latest = new Map<string, TaskStatusRecord>();
+  let total = 0;
+  const pendingSubmissionPagesByTask = new Map<string, number>();
   for (const record of records) {
     if (record.runDate !== runDate || !PAGE_ACCOUNTING_STATUSES.has(record.status)) {
       continue;
     }
-    latest.set(record.taskId, record);
+    const pages = Math.max(0, record.pages || 0);
+    if (record.status === "download_started") {
+      const pendingPages = pendingSubmissionPagesByTask.get(record.taskId);
+      if (pendingPages !== undefined) {
+        total += pendingPages;
+      }
+      pendingSubmissionPagesByTask.set(record.taskId, pages);
+      continue;
+    }
+
+    const pendingPages = pendingSubmissionPagesByTask.get(record.taskId);
+    if (pendingPages === undefined) {
+      total += pages;
+      continue;
+    }
+    total += Math.max(pages, pendingPages);
+    pendingSubmissionPagesByTask.delete(record.taskId);
   }
-  return latest;
+  for (const pages of pendingSubmissionPagesByTask.values()) {
+    total += pages;
+  }
+  return total;
 }
 
 function latestRecordByTask(records: TaskStatusRecord[]): Map<string, TaskStatusRecord> {

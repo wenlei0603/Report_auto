@@ -30,6 +30,12 @@ export async function waitForResearchScope(
   while (Date.now() < deadline) {
     const scope = getResearchScope(page);
     const url = scopeUrl(scope);
+    const bodyText = await safeBodyText(scope);
+    const blocker = researchScopeBlocker(page.url(), bodyText);
+    if (blocker?.kind === "auth") {
+      throw new Error(`LSEG session is not authenticated: ${blocker.reason}. Log in manually, then run again.`);
+    }
+
     if (/\/Apps\/research-next\/2\./.test(url)) {
       return scope;
     }
@@ -37,7 +43,7 @@ export async function waitForResearchScope(
     if (page.url().includes("BatchSavePrint") && config.behavior.recover_from_batchsaveprint) {
       await logger.event("WARN", "Recovering from BatchSavePrint page", { currentUrl: page.url() });
       await page.goto(config.workspace_url, { waitUntil: "domcontentloaded" });
-    } else if (restarts < config.behavior.app_restart_attempts && hasLoadFailureText(await safeBodyText(scope))) {
+    } else if (restarts < config.behavior.app_restart_attempts && hasLoadFailureText(bodyText)) {
       restarts += 1;
       await logger.event("WARN", "Research app appears failed, reloading workspace", { attempt: restarts });
       await page.goto(config.workspace_url, { waitUntil: "domcontentloaded" });
@@ -47,6 +53,16 @@ export async function waitForResearchScope(
   }
 
   throw new Error(`Research scope not ready after ${config.timeouts.login_wait_seconds}s; current URL=${page.url()}`);
+}
+
+export function researchScopeBlocker(url: string, bodyText: string): { kind: "auth"; reason: string } | null {
+  if (/login|signin|auth|saml|oauth/i.test(url)) {
+    return { kind: "auth", reason: "auth_url" };
+  }
+  if (/signed in to another device|session is expired|session expired|sign in|log in/i.test(bodyText)) {
+    return { kind: "auth", reason: "auth_text" };
+  }
+  return null;
 }
 
 async function safeBodyText(scope: AutomationScope): Promise<string> {

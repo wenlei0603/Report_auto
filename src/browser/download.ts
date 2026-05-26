@@ -61,6 +61,14 @@ export interface DownloadRowSelectionItem {
   title: string;
   pages: string;
   contributor: string;
+  scoreTotal: number;
+  scoreBreakdown: {
+    tickerScore: number;
+    titleScore: number;
+    dateScore: number;
+    penalties: number;
+    industryPenaltyApplied: boolean;
+  };
   reasons: string[];
 }
 
@@ -71,6 +79,7 @@ export async function executeBulkDownload(input: {
   task: RequestTask;
   estimatedPages: number;
   reserveSelectedPages?: (rowSelection: DownloadRowSelection, selectedPages: number) => Promise<{ ok: boolean; error: string }>;
+  commitSelectedPages?: (rowSelection: DownloadRowSelection, selectedPages: number) => Promise<void>;
 }): Promise<BulkDownloadResult> {
   const { page, scope, config, task, estimatedPages } = input;
   await disconnectInteractionLink(scope, page);
@@ -94,7 +103,16 @@ export async function executeBulkDownload(input: {
     }
 
     const pdfBaseline = await snapshotPdfCandidates(config, task.taskId);
-    const clickedSave = await waitAndClickSave(scope, config, page);
+    let committed = false;
+    const commitSelectedPages = async () => {
+      if (committed || !selected.rowSelection) {
+        return;
+      }
+      committed = true;
+      const selectedPages = Math.max(1, selectedRowPages(selected.rowSelection) || estimatedPages);
+      await input.commitSelectedPages?.(selected.rowSelection, selectedPages);
+    };
+    const clickedSave = await waitAndClickSave(scope, config, page, commitSelectedPages);
     const detachedResult = await detachOnBatchSavePrint(page, config, task, estimatedPages, pdfBaseline, selected.rowSelection);
     if (detachedResult) {
       return detachedResult;
@@ -298,6 +316,8 @@ function rowSelectionItem(row: ResultRowsReview["reviews"][number]): DownloadRow
     title: row.titleText,
     pages: row.pagesText,
     contributor: row.contributorText,
+    scoreTotal: row.review.scoreTotal,
+    scoreBreakdown: row.review.scoreBreakdown,
     reasons: row.review.reasons
   };
 }
@@ -619,10 +639,16 @@ async function clickSelectAllShadowCheck(scope: AutomationScope): Promise<boolea
   }
 }
 
-async function waitAndClickSave(scope: AutomationScope, config: LsegConfig, page: Page): Promise<boolean> {
+async function waitAndClickSave(
+  scope: AutomationScope,
+  config: LsegConfig,
+  page: Page,
+  afterClick?: () => Promise<void>
+): Promise<boolean> {
   const deadline = Date.now() + config.timeouts.download_ms;
   while (Date.now() < deadline) {
     if (await clickFirst(scope, config.selectors.save_to_pc_buttons, 700)) {
+      await afterClick?.();
       return true;
     }
     await page.waitForTimeout(350);

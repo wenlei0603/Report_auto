@@ -10,5 +10,8 @@ describe("page guard", () => {
     guard.spend(7);
     expect(guard.used).toBe(10);
     expect(() => guard.spend(1)).toThrow(/Page limit exceeded/);
+    guard.refund(4);
+    expect(guard.used).toBe(6);
+    expect(guard.remaining).toBe(4);
   });
 });

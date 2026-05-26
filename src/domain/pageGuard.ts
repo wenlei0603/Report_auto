@@ -23,4 +23,8 @@ export class PageGuard {
     }
     this.usedPages += normalized;
   }
+
+  refund(pages: number): void {
+    this.usedPages = Math.max(0, this.usedPages - Math.max(0, pages));
+  }
 }

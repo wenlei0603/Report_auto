@@ -25,7 +25,17 @@ export interface ContributorCandidate {
   matchType: string;
 }
 
+export interface CountryCandidate {
+  label: string;
+  value: string;
+  matchType: string;
+}
+
 const COMPANY_SUFFIX_WORDS = new Set(["co", "inc", "corp", "corporation", "ltd", "limited", "plc", "group", "sa", "ag"]);
+const CONTRIBUTOR_COMPONENT_SELECTOR =
+  "app-contributors-filter emerald-multi-select, app-contributors-filter app-multi-select emerald-multi-select";
+const CONTRIBUTOR_INPUT_SELECTOR = `${CONTRIBUTOR_COMPONENT_SELECTOR} input[placeholder*='Contributors' i]`;
+const COUNTRY_COMPONENT_SELECTOR = "app-regions-filter emerald-multi-select";
 
 export interface SuggestionSnapshot {
   filtered: Array<{ label: string; value: string }>;
@@ -125,6 +135,47 @@ export function chooseContributorCandidate(
   return { label: selected.label, value: selected.value, matchType: selected.matchType };
 }
 
+export function isContributorSelectionApplied(
+  state: { selectedLabels?: string[]; values?: string[] },
+  contributor: string
+): boolean {
+  const requested = normalizeText(contributor);
+  if (!requested) {
+    return false;
+  }
+  const labels = (state.selectedLabels ?? []).map((label) => normalizeText(label));
+  return labels.some((label) => label === requested || label.includes(requested));
+}
+
+export function chooseCountryCandidate(items: Array<{ label?: string; value?: string }>, country: string): CountryCandidate | null {
+  const requested = normalizeText(country);
+  const aliases =
+    requested === "usa" || requested === "united states" || requested === "united states of america"
+      ? new Set(["usa", "us", "united states", "united states of america"])
+      : new Set([requested]);
+
+  const candidates = items
+    .filter((item) => item?.value)
+    .map((item) => {
+      const label = normalizeText(String(item.label ?? ""));
+      const value = normalizeText(String(item.value ?? ""));
+      const match = aliases.has(label) || aliases.has(value);
+      return {
+        label: String(item.label ?? ""),
+        value: String(item.value ?? ""),
+        score: match ? 100 : 0,
+        matchType: match && aliases.has("usa") ? "usa_alias" : match ? "exact_label" : "none"
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const selected = candidates.find((candidate) => candidate.score > 0);
+  if (!selected) {
+    return null;
+  }
+  return { label: selected.label, value: selected.value, matchType: selected.matchType };
+}
+
 export async function closePopupDialogs(scope: AutomationScope): Promise<void> {
   try {
     await scope.evaluate(() => {
@@ -154,17 +205,26 @@ export async function closePopupDialogs(scope: AutomationScope): Promise<void> {
 
 export async function ensureQueryMode(scope: AutomationScope, config: LsegConfig): Promise<boolean> {
   await closePopupDialogs(scope);
+  await throwIfAuthSessionText(scope);
   if (await waitForQueryMode(scope, config, 3500)) {
     return true;
   }
   if (await reopenSearchCriteriaPanel(scope, config)) {
     await owningPage(scope).waitForTimeout(900);
     await closePopupDialogs(scope);
+    await throwIfAuthSessionText(scope);
     if (await waitForQueryMode(scope, config, 3500)) {
       return true;
     }
   }
   return false;
+}
+
+async function throwIfAuthSessionText(scope: AutomationScope): Promise<void> {
+  const text = await scope.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+  if (/signed in to another device|session is expired|session expired|sign in|log in/i.test(text)) {
+    throw new Error("LSEG session is not authenticated: auth_text. Log in manually, then run again.");
+  }
 }
 
 async function reopenSearchCriteriaPanel(scope: AutomationScope, config: LsegConfig): Promise<boolean> {
@@ -296,8 +356,10 @@ async function hasExpandedFilterPanelVisible(scope: AutomationScope): Promise<bo
 export async function applyGlobalFilters(scope: AutomationScope, config: LsegConfig): Promise<FilterResult> {
   await closePopupDialogs(scope);
   const contributorResult = await setContributor(scope, config.filters.contributor);
+  const countryResult = await setCountryRegion(scope, config.filters.country);
+  const pageLimitResult = await applyPageLimitFilter(scope, config.filters.max_pages);
   const details = await scope.evaluate(
-    ({ country, industry, contributorResult }) => {
+    ({ industry, contributorResult, countryResult, pageLimitResult }) => {
       const clearContributorPreferred = () => {
         const includeButton = document.querySelector<HTMLElement>("app-contributors-filter coral-radio-button");
         includeButton?.click();
@@ -307,29 +369,6 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
           const checked = cb.hasAttribute("checked") || cb.checked === true || cb.getAttribute("aria-checked") === "true";
           if (label.includes("preferred") && checked) cb.click();
         }
-      };
-
-      const setCountry = () => {
-        const el = document.querySelector<any>("app-regions-filter emerald-multi-select");
-        if (!el) return { ok: false, reason: "no_regions_component" };
-        const walk = (items: any[]): any | null => {
-          for (const item of items ?? []) {
-            const label = String(item?.label ?? "").toLowerCase();
-            if (label.includes("united states of america") || label === "usa" || label === "united states") return item;
-            const child = walk(item?.items ?? item?.children ?? []);
-            if (child) return child;
-          }
-          return null;
-        };
-        const data = [...(el._resolvedData ?? []), ...(el._data ?? []), ...(el.data ?? [])];
-        const target = walk(data);
-        if (!target?.value) return { ok: false, reason: "usa_not_found" };
-        el.values = [String(target.value)];
-        el.value = String(target.value);
-        el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-        el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-        el.dispatchEvent(new CustomEvent("confirm", { bubbles: true, composed: true }));
-        return { ok: true, selectedLabels: el.selectedLabels ?? [], values: el.values ?? [], requested: country };
       };
 
       const clearIndustry = () => {
@@ -347,7 +386,6 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
       };
 
       clearContributorPreferred();
-      const countryResult = setCountry();
       const industryResult = clearIndustry();
       const preferredStillChecked = [...document.querySelectorAll<any>("coral-checkbox")].filter((cb) => {
         const label = String(cb.textContent ?? "").toLowerCase();
@@ -355,9 +393,9 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
         return label.includes("preferred") && checked;
       }).length;
 
-      return { contributorResult, countryResult, industryResult, preferredStillChecked };
+      return { contributorResult, countryResult, industryResult, pageLimitResult, preferredStillChecked };
     },
-    { country: config.filters.country, industry: config.filters.industry, contributorResult }
+    { industry: config.filters.industry, contributorResult, countryResult, pageLimitResult }
   );
 
   const ok =
@@ -371,11 +409,16 @@ export async function applyGlobalFilters(scope: AutomationScope, config: LsegCon
 
 async function setContributor(scope: AutomationScope, contributor: string): Promise<Record<string, unknown>> {
   const page = owningPage(scope);
-  const input = scope
-    .locator("app-contributors-filter app-multi-select emerald-multi-select input[placeholder*='Contributors' i]")
-    .first();
+  const existingSelection = await readContributorSelection(scope);
+  if (isContributorSelectionApplied(existingSelection, contributor)) {
+    return { ...existingSelection, ok: true, applied: true, reason: "contributor_already_selected" };
+  }
+
+  const input = scope.locator(CONTRIBUTOR_INPUT_SELECTOR).first();
   const beforeSignature = await scope.evaluate(() => {
-    const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+    const el = document.querySelector<any>(
+      "app-contributors-filter emerald-multi-select, app-contributors-filter app-multi-select emerald-multi-select"
+    );
     if (!el) return "";
     const data = [...(el._resolvedData ?? []), ...(el._data ?? []), ...(el.data ?? [])];
     return data
@@ -387,7 +430,9 @@ async function setContributor(scope: AutomationScope, contributor: string): Prom
 
   try {
     await scope.evaluate(() => {
-      const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+      const el = document.querySelector<any>(
+        "app-contributors-filter emerald-multi-select, app-contributors-filter app-multi-select emerald-multi-select"
+      );
       if (!el) return;
       el.values = [];
       el.value = "";
@@ -399,7 +444,9 @@ async function setContributor(scope: AutomationScope, contributor: string): Prom
     await input.press("Backspace", { timeout: 3000 }).catch(() => undefined);
     await input.type(contributor, { delay: 70, timeout: 6000 });
     await scope.evaluate((typedQuery) => {
-      const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+      const el = document.querySelector<any>(
+        "app-contributors-filter emerald-multi-select, app-contributors-filter app-multi-select emerald-multi-select"
+      );
       if (!el) return;
       el.query = typedQuery;
       el.opened = true;
@@ -421,7 +468,9 @@ async function setContributor(scope: AutomationScope, contributor: string): Prom
   while (Date.now() < deadline) {
     snapshot = await scope.evaluate((typedQuery) => {
       const normalized = String(typedQuery ?? "").trim().toLowerCase();
-      const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+      const el = document.querySelector<any>(
+        "app-contributors-filter emerald-multi-select, app-contributors-filter app-multi-select emerald-multi-select"
+      );
       if (!el) {
         return { filtered: [], signature: "", componentQuery: "", inputValue: "" };
       }
@@ -468,6 +517,10 @@ async function setContributor(scope: AutomationScope, contributor: string): Prom
 
   const selected = chooseContributorCandidate(pool, contributor);
   if (!selected) {
+    const currentSelection = await readContributorSelection(scope);
+    if (isContributorSelectionApplied(currentSelection, contributor)) {
+      return { ...currentSelection, ok: true, applied: true, reason: "contributor_selected_without_fresh_suggestions", snapshot };
+    }
     return { ok: false, reason: "contributor_not_found", labels: pool.slice(0, 8).map((item) => item.label), snapshot };
   }
 
@@ -476,6 +529,22 @@ async function setContributor(scope: AutomationScope, contributor: string): Prom
     selected,
     candidates: pool.slice(0, 10)
   }));
+}
+
+async function readContributorSelection(scope: AutomationScope): Promise<{ selectedLabels: string[]; values: string[] }> {
+  return scope
+    .evaluate(() => {
+      const el = document.querySelector<any>(
+        "app-contributors-filter emerald-multi-select, app-contributors-filter app-multi-select emerald-multi-select"
+      );
+      if (!el) {
+        return { selectedLabels: [], values: [] };
+      }
+      const selectedLabels = Array.isArray(el.selectedLabels) ? el.selectedLabels.map((value: unknown) => String(value)) : [];
+      const values = Array.isArray(el.values) ? el.values.map((value: unknown) => String(value)) : [];
+      return { selectedLabels, values };
+    })
+    .catch(() => ({ selectedLabels: [], values: [] }));
 }
 
 export function isContributorSuggestionSnapshotReady(
@@ -511,7 +580,9 @@ async function applyContributorValueWithVerification(
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     const state = await scope.evaluate(
       async ({ value, label }) => {
-        const el = document.querySelector<any>("app-contributors-filter app-multi-select emerald-multi-select");
+        const el = document.querySelector<any>(
+          "app-contributors-filter emerald-multi-select, app-contributors-filter app-multi-select emerald-multi-select"
+        );
         if (!el) return { ok: false, reason: "no_contributor_component", selectedLabels: [], values: [], applied: false };
 
         el.values = [String(value)];
@@ -556,6 +627,231 @@ async function applyContributorValueWithVerification(
     selectedLabels: [],
     values: []
   };
+}
+
+async function setCountryRegion(scope: AutomationScope, country: string): Promise<Record<string, unknown>> {
+  const page = owningPage(scope);
+  await scope
+    .evaluate(
+      ({ selector, query }) => {
+        const el = document.querySelector<any>(selector);
+        if (!el) {
+          return;
+        }
+        el.opened = true;
+        el.query = query;
+      },
+      { selector: COUNTRY_COMPONENT_SELECTOR, query: country === "USA" ? "United States" : country }
+    )
+    .catch(() => undefined);
+
+  let pool: Array<{ label: string; value: string }> = [];
+  const deadline = Date.now() + 6000;
+  while (Date.now() < deadline) {
+    pool = await scope
+      .evaluate((selector) => {
+        const el = document.querySelector<any>(selector);
+        if (!el) {
+          return [];
+        }
+        const read = (items: any[]): Array<{ label: string; value: string }> => {
+          const out: Array<{ label: string; value: string }> = [];
+          for (const item of items ?? []) {
+            if (item?.value) {
+              out.push({ label: String(item.label ?? ""), value: String(item.value ?? "") });
+            }
+            out.push(...read(item?.items ?? item?.children ?? []));
+          }
+          return out;
+        };
+        return read([...(el._resolvedData ?? []), ...(el._data ?? []), ...(el.data ?? [])]);
+      }, COUNTRY_COMPONENT_SELECTOR)
+      .catch(() => []);
+
+    const selected = chooseCountryCandidate(pool, country);
+    if (selected) {
+      return applyCountryValueWithVerification(scope, selected.value, selected.label).then((state) => ({
+        ...state,
+        selected,
+        candidates: pool.slice(0, 10),
+        requested: country
+      }));
+    }
+    await page.waitForTimeout(250);
+  }
+
+  return { ok: false, reason: "country_not_found", labels: pool.slice(0, 8).map((item) => item.label), requested: country };
+}
+
+async function applyCountryValueWithVerification(
+  scope: AutomationScope,
+  selectedValue: string,
+  selectedLabel: string
+): Promise<Record<string, unknown>> {
+  const labelNorm = normalizeText(selectedLabel);
+  const valueNorm = normalizeText(selectedValue);
+
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const state = await scope.evaluate(
+      async ({ selector, value, label }) => {
+        const el = document.querySelector<any>(selector);
+        if (!el) return { ok: false, reason: "no_regions_component", selectedLabels: [], values: [], applied: false };
+        el.values = [String(value)];
+        el.value = String(value);
+        el.opened = false;
+        el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        el.dispatchEvent(new CustomEvent("confirm", { bubbles: true, composed: true }));
+        await new Promise((resolve) => setTimeout(resolve, 260));
+
+        const values = Array.isArray(el.values) ? el.values.map((x: unknown) => String(x)) : [];
+        const selectedLabels = Array.isArray(el.selectedLabels) ? el.selectedLabels.map((x: unknown) => String(x)) : [];
+        const hasValue = values.some((item: string) => String(item).trim().toLowerCase() === String(value).trim().toLowerCase());
+        const hasLabel = selectedLabels.some((item: string) =>
+          String(item).trim().toLowerCase().includes(String(label).trim().toLowerCase())
+        );
+        return { ok: hasValue || hasLabel, selectedLabels, values, applied: hasValue || hasLabel };
+      },
+      { selector: COUNTRY_COMPONENT_SELECTOR, value: selectedValue, label: selectedLabel }
+    );
+
+    const values = ((state.values as string[] | undefined) ?? []).map((item) => normalizeText(item));
+    const labels = ((state.selectedLabels as string[] | undefined) ?? []).map((item) => normalizeText(item));
+    if (values.includes(valueNorm) || labels.some((item) => item.includes(labelNorm))) {
+      return { ...state, ok: true, applied: true, applyAttempt: attempt };
+    }
+    await owningPage(scope).waitForTimeout(220);
+  }
+
+  return { ok: false, applied: false, reason: "country_selection_not_materialized", selectedLabels: [], values: [] };
+}
+
+async function applyPageLimitFilter(scope: AutomationScope, maxPages: number): Promise<Record<string, unknown>> {
+  return scope
+    .evaluate((limit) => {
+      const visible = (el: Element) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 2 && rect.height > 2;
+      };
+      const text = (el: Element) => String(el.textContent ?? "").replace(/\s+/g, " ").trim();
+      const dispatch = (el: Element) => {
+        el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        el.dispatchEvent(new CustomEvent("confirm", { bubbles: true, composed: true }));
+      };
+      const deepElements = (root: ParentNode): Element[] => {
+        const out: Element[] = [];
+        for (const el of [...root.querySelectorAll("*")]) {
+          out.push(el);
+          const shadow = (el as HTMLElement).shadowRoot;
+          if (shadow) {
+            out.push(...deepElements(shadow));
+          }
+        }
+        return out;
+      };
+
+      const elements = deepElements(document);
+      const host =
+        document.querySelector("app-page-count-filter") ??
+        elements.find((el) => /^app-.*pages?.*filter$/i.test(el.tagName.toLowerCase())) ??
+        elements.find((el) => visible(el) && /pages?|number of pages/i.test(text(el)) && el.querySelector("input, emerald-number-input, coral-input"));
+      if (!host) {
+        return { ok: true, applied: false, reason: "page_filter_component_not_found_result_review_only", requestedMaxPages: limit };
+      }
+
+      const hostElements = [host, ...deepElements(host)];
+      const operatorSelect = host.querySelector("coral-select") as HTMLElement & {
+        value?: string;
+        selectedItem?: HTMLElement;
+      } | null;
+      const lessOrEqualItem = [...host.querySelectorAll("coral-item")].find((item) => {
+        const value = String(item.getAttribute("value") ?? (item as any).value ?? "");
+        return value === "LessOrEqual" || text(item) === "<=";
+      }) as (HTMLElement & { selected?: boolean; value?: string }) | undefined;
+      if (operatorSelect) {
+        operatorSelect.click();
+        if (lessOrEqualItem) {
+          for (const item of [...host.querySelectorAll("coral-item")] as Array<HTMLElement & { selected?: boolean }>) {
+            item.removeAttribute("selected");
+            item.selected = false;
+          }
+          lessOrEqualItem.setAttribute("selected", "");
+          lessOrEqualItem.selected = true;
+          operatorSelect.value = String(lessOrEqualItem.getAttribute("value") ?? lessOrEqualItem.value ?? "LessOrEqual");
+          operatorSelect.selectedItem = lessOrEqualItem;
+          lessOrEqualItem.click();
+        } else {
+          operatorSelect.value = "LessOrEqual";
+        }
+        dispatch(operatorSelect);
+      }
+
+      const pageCountField = host.querySelector("coral-text-field") as (HTMLElement & { value?: string }) | null;
+      const pageCountShadowInput = pageCountField?.shadowRoot?.querySelector("input[part='input'], input") as HTMLInputElement | null;
+      if (pageCountField || pageCountShadowInput) {
+        if (pageCountShadowInput) {
+          pageCountShadowInput.focus();
+          pageCountShadowInput.value = String(limit);
+          dispatch(pageCountShadowInput);
+          pageCountShadowInput.blur();
+        }
+        if (pageCountField) {
+          pageCountField.value = String(limit);
+          pageCountField.setAttribute("value", String(limit));
+          dispatch(pageCountField);
+        }
+
+        const appliedValue = String(pageCountField?.value ?? pageCountShadowInput?.value ?? "");
+        const appliedOperator =
+          String(operatorSelect?.value ?? "") ||
+          text((operatorSelect?.selectedItem as Element | undefined) ?? lessOrEqualItem ?? host).slice(0, 30);
+        return {
+          ok: appliedValue === String(limit),
+          applied: appliedValue === String(limit),
+          requestedMaxPages: limit,
+          value: appliedValue,
+          operator: appliedOperator,
+          hostText: text(host).slice(0, 160)
+        };
+      }
+
+      const numericInputs = hostElements.filter((el) => {
+        const name = [
+          el.getAttribute("placeholder"),
+          el.getAttribute("aria-label"),
+          el.getAttribute("name"),
+          el.getAttribute("label"),
+          text(el.parentElement ?? el)
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return el instanceof HTMLInputElement && (!name || /page|max|to|less|under|<=|number/.test(name));
+      }) as HTMLInputElement[];
+
+      const targetInput = numericInputs[numericInputs.length - 1] ?? null;
+      if (!targetInput) {
+        return { ok: false, applied: false, reason: "page_filter_input_not_found", requestedMaxPages: limit, hostText: text(host).slice(0, 160) };
+      }
+
+      targetInput.focus();
+      targetInput.value = String(limit);
+      dispatch(targetInput);
+      targetInput.blur();
+
+      const fallbackOperatorSelect = hostElements.find((el) => el.tagName.toLowerCase() === "coral-select") as HTMLElement | undefined;
+      fallbackOperatorSelect?.click();
+      const leItem = deepElements(document).find((el) => {
+        const value = text(el).toLowerCase();
+        return visible(el) && /less than or equal|less than|at most|<=|≤|max/i.test(value);
+      }) as HTMLElement | undefined;
+      leItem?.click();
+
+      return { ok: true, applied: true, requestedMaxPages: limit, value: targetInput.value, hostText: text(host).slice(0, 160) };
+    }, maxPages)
+    .catch((error) => ({ ok: false, applied: false, reason: "page_filter_apply_failed", error: String(error), requestedMaxPages: maxPages }));
 }
 
 export async function applyTaskFilters(scope: AutomationScope, config: LsegConfig, task: RequestTask): Promise<TaskFilterResult> {
@@ -901,13 +1197,68 @@ async function setCustomDateRange(scope: AutomationScope, dateFrom: string, date
   const fromText = formatPickerDate(dateFrom);
   const toText = formatPickerDate(dateTo);
 
-  const opened = await scope.evaluate(() => {
+  const openedSelect = await scope.evaluate(() => {
     const root = document.querySelector("app-date-range-filter");
-    if (!root) return false;
-    (root.querySelector("coral-select") as HTMLElement | null)?.click();
-    const custom = [...root.querySelectorAll("coral-item")].find((item) => /custom/i.test((item.textContent ?? "").trim()));
+    const select = root?.querySelector("coral-select") as HTMLElement | null;
+    select?.click();
+    return Boolean(select);
+  });
+  if (!openedSelect) {
+    return [false, false];
+  }
+  await page.waitForTimeout(250);
+
+  const opened = await scope.evaluate(async () => {
+    const visible = (el: Element) => {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 2 && rect.height > 2;
+    };
+    const normalizedText = (el: Element) => String(el.textContent ?? "").replace(/\s+/g, " ").trim();
+    const deepElements = (root: ParentNode): Element[] => {
+      const out: Element[] = [];
+      for (const el of [...root.querySelectorAll("*")]) {
+        out.push(el);
+        const shadow = (el as HTMLElement).shadowRoot;
+        if (shadow) {
+          out.push(...deepElements(shadow));
+        }
+      }
+      return out;
+    };
+    const root = document.querySelector("app-date-range-filter");
+    const select = root?.querySelector<any>("coral-select");
+    if (select) {
+      select.setOpened?.(true);
+      select.opened = true;
+      select.dispatchEvent(new CustomEvent("opened-changed", { bubbles: true, composed: true, detail: { value: true } }));
+      await new Promise((resolve) => setTimeout(resolve, 160));
+    }
+
+    const candidates = deepElements(root ?? document).filter((el) => {
+      const value = normalizedText(el);
+      return /^custom\b/i.test(value) && value.length <= 80;
+    });
+    const custom =
+      candidates.find((el) => visible(el) && el.tagName.toLowerCase() === "coral-item") ??
+      candidates.find((el) => el.tagName.toLowerCase() === "coral-item") ??
+      candidates.find((el) => ["option", "menuitem"].includes(String(el.getAttribute("role") ?? "").toLowerCase())) ??
+      candidates.find((el) => visible(el) && el instanceof HTMLElement) ??
+      candidates.find((el) => el instanceof HTMLElement);
     if (custom instanceof HTMLElement) {
+      if (select) {
+        for (const item of [...select.querySelectorAll("coral-item")] as Array<HTMLElement & { selected?: boolean }>) {
+          item.removeAttribute("selected");
+          item.selected = false;
+        }
+        (custom as any).selected = true;
+        custom.setAttribute("selected", "");
+        select.selectedItem = custom;
+        select.value = String((custom as any).value ?? custom.getAttribute("value") ?? "Custom");
+      }
       custom.click();
+      select?.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      select?.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
       return true;
     }
     return false;
@@ -917,28 +1268,89 @@ async function setCustomDateRange(scope: AutomationScope, dateFrom: string, date
   }
   await page.waitForTimeout(350);
 
-  const focused = await scope.evaluate(() => {
-    const picker = document.querySelector("app-date-range-filter emerald-datetime-picker") as any;
-    const input = picker?.shadowRoot?.querySelector("#input") as HTMLElement | null;
-    input?.focus();
-    return Boolean(input);
-  });
-  if (!focused) {
+  const filled = await scope.evaluate(
+    ({ fromText: fromValue, toText: toValue }) => {
+      const deepElements = (root: ParentNode): Element[] => {
+        const out: Element[] = [];
+        for (const el of [...root.querySelectorAll("*")]) {
+          out.push(el);
+          const shadow = (el as HTMLElement).shadowRoot;
+          if (shadow) {
+            out.push(...deepElements(shadow));
+          }
+        }
+        return out;
+      };
+      const visible = (el: Element) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 2 && rect.height > 2;
+      };
+      const dispatchValueEvents = (el: Element) => {
+        el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        el.dispatchEvent(new CustomEvent("confirm", { bubbles: true, composed: true }));
+      };
+      const setValue = (field: Element, value: string) => {
+        const input =
+          field instanceof HTMLInputElement ? field : ((field as HTMLElement).shadowRoot?.querySelector("input[part='input'], input") as HTMLInputElement | null);
+        if (input) {
+          input.focus();
+          input.value = value;
+          dispatchValueEvents(input);
+          input.blur();
+        }
+        if (!(field instanceof HTMLInputElement)) {
+          (field as HTMLElement & { value?: string }).value = value;
+          field.setAttribute("value", value);
+          dispatchValueEvents(field);
+        }
+      };
+
+      const root = document.querySelector("app-date-range-filter");
+      const fields = deepElements(root ?? document).filter(
+        (el): el is HTMLElement => el.tagName.toLowerCase() === "coral-text-field" && visible(el)
+      );
+      const candidates = deepElements(root ?? document).filter(
+        (el): el is HTMLInputElement => el instanceof HTMLInputElement && visible(el)
+      );
+      const fromInput =
+        fields.find((field) => field.id === "input") ??
+        candidates.find((input) => input.id === "input") ??
+        candidates.find((input) => /from|start/i.test(`${input.placeholder} ${input.ariaLabel} ${input.name}`));
+      const toInput =
+        fields.find((field) => field.id === "input-to") ??
+        candidates.find((input) => input.id === "input-to") ??
+        candidates.find((input) => /to|end/i.test(`${input.placeholder} ${input.ariaLabel} ${input.name}`)) ??
+        candidates.find((input) => input !== fromInput);
+      if (!fromInput || !toInput) {
+        return { ok: false, inputCount: candidates.length, fieldCount: fields.length };
+      }
+      setValue(fromInput, fromValue);
+      setValue(toInput, toValue);
+      const readValue = (field: Element) =>
+        field instanceof HTMLInputElement
+          ? field.value
+          : String((field as HTMLElement & { value?: string }).value ?? (field as HTMLElement).shadowRoot?.querySelector<HTMLInputElement>("input")?.value ?? "");
+      return { ok: true, inputCount: candidates.length, fieldCount: fields.length, fromValue: readValue(fromInput), toValue: readValue(toInput) };
+    },
+    { fromText, toText }
+  );
+  if (!filled.ok) {
     return [false, false];
   }
 
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.type(fromText, { delay: 12 });
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.type(toText, { delay: 12 });
-
   await scope.evaluate(() => {
-    const panel = document.querySelector("app-date-range-filter app-date-picker-popup coral-popup-panel.popup-dialog");
-    const ok = [...(panel?.querySelectorAll("coral-button") ?? [])].find((button) => (button.textContent ?? "").trim() === "OK");
-    if (ok instanceof HTMLElement) ok.click();
+    const visible = (el: Element) => {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 2 && rect.height > 2;
+    };
+    const buttons = [...document.querySelectorAll("app-date-range-filter app-date-picker-popup coral-button, coral-popup-panel.popup-dialog coral-button")];
+    const ok = buttons.find((button) => visible(button) && (button.textContent ?? "").trim().toLowerCase() === "ok");
+    if (ok instanceof HTMLElement) {
+      ok.click();
+    }
   });
   await page.waitForTimeout(400);
 

@@ -37,7 +37,7 @@ describe("record store", () => {
     expect(await readFile(path.join(tmpDir, "progress.csv"), "utf8")).toContain("T0001");
   });
 
-  it("uses the latest task status when deciding completed tasks without erasing platform page usage", async () => {
+  it("uses the latest task status when deciding completed tasks without erasing page usage", async () => {
     const store = new RecordStore(
       path.join(tmpDir, "mapping.csv"),
       path.join(tmpDir, "status.jsonl"),
@@ -64,7 +64,7 @@ describe("record store", () => {
     expect(await store.dailyPages()).toBe(12);
   });
 
-  it("counts selected pages once download has been submitted to the platform", async () => {
+  it("keeps selected pages counted when a submitted download later fails before landing", async () => {
     const store = new RecordStore(
       path.join(tmpDir, "mapping.csv"),
       path.join(tmpDir, "status.jsonl"),
@@ -89,6 +89,72 @@ describe("record store", () => {
 
     expect(await store.doneTaskIds()).toEqual(new Set());
     expect(await store.dailyPages()).toBe(22);
+  });
+
+  it("does not refund selected pages when the landed pdf has fewer pages than the submitted selection", async () => {
+    const store = new RecordStore(
+      path.join(tmpDir, "mapping.csv"),
+      path.join(tmpDir, "status.jsonl"),
+      path.join(tmpDir, "progress.csv"),
+      500
+    );
+    await store.initialize();
+    await store.writeStatus({
+      task: taskFixture,
+      status: "download_started",
+      pages: 31,
+      note: "selected_pages_reserved",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+    await store.writeStatus({
+      task: taskFixture,
+      status: "downloaded",
+      pages: 23,
+      note: "downloaded",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+
+    expect(await store.dailyPages()).toBe(31);
+  });
+
+  it("counts each platform submission when the same task is retried after a submitted failure", async () => {
+    const store = new RecordStore(
+      path.join(tmpDir, "mapping.csv"),
+      path.join(tmpDir, "status.jsonl"),
+      path.join(tmpDir, "progress.csv"),
+      500
+    );
+    await store.initialize();
+    await store.writeStatus({
+      task: taskFixture,
+      status: "download_started",
+      pages: 22,
+      note: "selected_pages_reserved",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+    await store.writeStatus({
+      task: taskFixture,
+      status: "task_failed",
+      pages: 0,
+      note: "network error after platform submission",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+    await store.writeStatus({
+      task: taskFixture,
+      status: "download_started",
+      pages: 20,
+      note: "selected_pages_reserved",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+    await store.writeStatus({
+      task: taskFixture,
+      status: "downloaded",
+      pages: 18,
+      note: "downloaded",
+      pageUrl: "https://workspace.refinitiv.com"
+    });
+
+    expect(await store.dailyPages()).toBe(42);
   });
 });
 

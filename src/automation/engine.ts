@@ -5,6 +5,7 @@ import { reviewResultCompanyList } from "../browser/results.js";
 import { openBrowserSession } from "../browser/session.js";
 import { getResearchScope, waitForResearchScope } from "../browser/scope.js";
 import { classifyAppState, classifyResults } from "../browser/state.js";
+import { ensureUsableViewport } from "../browser/viewport.js";
 import { PageGuard } from "../domain/pageGuard.js";
 import { loadTasks } from "../domain/tasks.js";
 import type { FinalTaskStatus, RequestTask } from "../domain/types.js";
@@ -17,6 +18,7 @@ export interface RunOptions {
   maxTasks?: number;
   maxDownloads?: number;
   startFromTask?: string;
+  tasksFile?: string;
   includeDone?: boolean;
 }
 
@@ -49,14 +51,16 @@ export async function runAutomation(config: LsegConfig, options: RunOptions): Pr
   const store = new RecordStore(config.mapping_csv, config.status_log_jsonl, config.progress_csv, config.daily_page_limit);
   await store.initialize();
 
-  const allTasks = await loadTasks(config.input_file);
+  const taskSource = options.tasksFile ?? config.input_file;
+  const allTasks = await loadTasks(taskSource);
   const doneIds = await store.doneTaskIds();
   const pending = selectPendingTasks(allTasks, doneIds, options);
   await logger.event("INFO", "Loaded task queue", {
     totalTasks: allTasks.length,
     doneTasks: doneIds.size,
     pendingTasks: pending.length,
-    dryRun: options.dryRun
+    dryRun: options.dryRun,
+    taskSource
   });
 
   if (options.dryRun) {
@@ -148,6 +152,9 @@ async function runOneTask(input: {
 }): Promise<FinalTaskStatus> {
   const { config, logger, store, task, pageGuard } = input;
   const { page } = input;
+  let reservedPages = 0;
+  let downloadStartedRecorded = false;
+  await ensureUsableViewport(page, logger);
   let scope = await waitForResearchScope(page, config, logger);
 
   try {
@@ -232,19 +239,8 @@ async function runOneTask(input: {
     }
 
     const estimatedPages = Math.max(1, resultState.estimatedPages);
-    if (!pageGuard.canSpend(estimatedPages)) {
-      await store.writeStatus({
-        task,
-        status: "page_limit",
-        pages: 0,
-        note: `estimated_pages=${estimatedPages}; remaining=${pageGuard.remaining}`,
-        pageUrl: page.url()
-      });
-      return "page_limit";
-    }
 
     const downloadSourceUrl = page.url();
-    let reservedPages = 0;
     const download = await executeBulkDownload({
       page,
       scope,
@@ -260,6 +256,17 @@ async function runOneTask(input: {
         }
         pageGuard.spend(selectedPages);
         reservedPages = selectedPages;
+        return { ok: true, error: "" };
+      },
+      commitSelectedPages: async (rowSelection, selectedPages) => {
+        if (downloadStartedRecorded) {
+          return;
+        }
+        if (reservedPages === 0) {
+          pageGuard.spend(selectedPages);
+          reservedPages = selectedPages;
+        }
+        downloadStartedRecorded = true;
         await store.writeStatus({
           task,
           status: "download_started",
@@ -267,7 +274,6 @@ async function runOneTask(input: {
           note: `selected_pages_reserved:selected=${selectedPages};rows=${rowSelection.selected};remaining_after=${pageGuard.remaining}`,
           pageUrl: downloadSourceUrl
         });
-        return { ok: true, error: "" };
       }
     });
     if (download.rowSelection) {
@@ -287,6 +293,9 @@ async function runOneTask(input: {
           pageUrl: downloadSourceUrl
         });
         return "page_limit";
+      }
+      if (!downloadStartedRecorded) {
+        pageGuard.refund(reservedPages);
       }
       await writeFailure(store, task, failureStatus, download.error || "download_failed_without_artifact", downloadSourceUrl);
       return failureStatus;
@@ -309,8 +318,14 @@ async function runOneTask(input: {
     });
     return "downloaded";
   } catch (error) {
+    if (!downloadStartedRecorded) {
+      pageGuard.refund(reservedPages);
+    }
     await logger.event("ERROR", "Task failed", { taskId: task.taskId, error: String(error) });
     await writeFailure(store, task, "task_failed", String(error), page.url());
+    if (isAuthSessionError(error)) {
+      throw error;
+    }
     return "task_failed";
   }
 }
@@ -342,6 +357,10 @@ export function shouldStopRunAfterStatus(
 
 function effectiveMaxDownloads(config: LsegConfig, options: RunOptions): number {
   return options.maxDownloads ?? config.max_downloads;
+}
+
+function isAuthSessionError(error: unknown): boolean {
+  return String(error).includes("LSEG session is not authenticated");
 }
 
 async function writeFailure(

@@ -8,7 +8,15 @@ test-results/
 everything-claude-code-ssh/
 Pastproject/
 logs/*.jsonl
+logs/*.json
+logs/*.csv
+logs/*.txt
+logs/*.log
 logs_account2/*.jsonl
+logs_account2/*.json
+logs_account2/*.csv
+logs_account2/*.txt
+logs_account2/*.log
 output/downloads/
 output_account2/downloads/
 output/debug/

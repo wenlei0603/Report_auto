@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   chooseCompanyCandidate,
   chooseContributorCandidate,
+  chooseCountryCandidate,
   isContributorSuggestionSnapshotReady,
+  isContributorSelectionApplied,
   isSuggestionSnapshotReady
 } from "../src/browser/filters.js";
 
@@ -113,6 +115,20 @@ describe("contributor candidate selection", () => {
   });
 });
 
+describe("contributor selection state", () => {
+  it("accepts an already materialized contributor selection", () => {
+    expect(
+      isContributorSelectionApplied(
+        {
+          selectedLabels: ["Morgan Stanley"],
+          values: ["112604678803"]
+        },
+        "Morgan Stanley"
+      )
+    ).toBe(true);
+  });
+});
+
 describe("contributor suggestion readiness", () => {
   it("accepts stable exact-match suggestions even when the query was already reflected before polling", () => {
     expect(
@@ -144,5 +160,23 @@ describe("contributor suggestion readiness", () => {
         2
       )
     ).toBe(false);
+  });
+});
+
+describe("country candidate selection", () => {
+  it("accepts United States of America for USA config", () => {
+    const selected = chooseCountryCandidate(
+      [
+        { label: "Canada", value: "CAN" },
+        { label: "United States of America", value: "USA" }
+      ],
+      "USA"
+    );
+
+    expect(selected).toEqual({ label: "United States of America", value: "USA", matchType: "usa_alias" });
+  });
+
+  it("rejects unrelated stale country suggestions", () => {
+    expect(chooseCountryCandidate([{ label: "United Kingdom", value: "GBR" }], "USA")).toBeNull();
   });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { classifyUrl, estimatePagesFromPageTexts } from "../src/browser/state.js";
 import { isQueryModeReady } from "../src/browser/filters.js";
+import { researchScopeBlocker } from "../src/browser/scope.js";
 import { workspacePageRank } from "../src/browser/session.js";
+import { needsViewportExpansion, targetViewportSize } from "../src/browser/viewport.js";
 
 describe("URL state classifier", () => {
   it("detects BatchSavePrint drift", () => {
@@ -82,5 +84,29 @@ describe("page estimation", () => {
 
   it("parses page values that still include the pages label", () => {
     expect(estimatePagesFromPageTexts(["10 pages", "17 pages"])).toBe(27);
+  });
+});
+
+describe("research scope readiness blockers", () => {
+  it("recognizes expired or displaced login sessions before waiting for Research Next", () => {
+    expect(researchScopeBlocker("https://example.com/oauth/login", "")).toMatchObject({ kind: "auth" });
+    expect(researchScopeBlocker("https://workspace.refinitiv.com", "Session is expired. Sign in again")).toMatchObject({
+      kind: "auth"
+    });
+    expect(researchScopeBlocker("https://workspace.refinitiv.com", "You are signed in to another device")).toMatchObject({
+      kind: "auth"
+    });
+  });
+});
+
+describe("viewport guard", () => {
+  it("expands small windows to a stable desktop layout target", () => {
+    expect(needsViewportExpansion({ width: 900, height: 700 })).toBe(true);
+    expect(targetViewportSize({ width: 900, height: 700 })).toEqual({ width: 1600, height: 1000 });
+  });
+
+  it("leaves already-large windows unchanged", () => {
+    expect(needsViewportExpansion({ width: 1800, height: 1100 })).toBe(false);
+    expect(targetViewportSize({ width: 1800, height: 1100 })).toEqual({ width: 1800, height: 1100 });
   });
 });

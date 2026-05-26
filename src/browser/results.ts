@@ -30,6 +30,14 @@ export interface ResultRowReview {
   needsHumanReview: boolean;
   autoSelect: boolean;
   downloadCategory: "ticker_matched" | "ticker_mismatch" | "none";
+  scoreTotal: number;
+  scoreBreakdown: {
+    tickerScore: number;
+    titleScore: number;
+    dateScore: number;
+    penalties: number;
+    industryPenaltyApplied: boolean;
+  };
   reasons: string[];
 }
 
@@ -45,6 +53,35 @@ export interface ResultRowsReview {
 
 const GENERIC_COMPANY_WORDS = new Set(["co", "inc", "corp", "ltd", "company", "plc", "nv", "sa", "ag", "se"]);
 const MAX_AUTO_SELECT_ROWS = 2;
+const INDUSTRY_TITLE_PATTERNS = [
+  "industry",
+  "sector",
+  "multi-industry",
+  "capital goods",
+  "transportation",
+  "airlines",
+  "retail",
+  "hardware",
+  "software",
+  "internet",
+  "media",
+  "cable",
+  "satellite",
+  "banks",
+  "biotechnology",
+  "consumer",
+  "macro",
+  "weekly",
+  "monthly",
+  "insights",
+  "perspectives",
+  "tracker",
+  "theme",
+  "themes",
+  "takeaways",
+  "selected trading multiples",
+  "look at"
+] as const;
 
 function dateTextIso(dateText: string): string {
   const head = dateText.split(",")[0]!.trim();
@@ -106,6 +143,11 @@ function targetTickerInTitle(titleText: string, taskTicker: string): boolean {
   return pattern.test(titleText);
 }
 
+function titleMatchesIndustryPattern(titleText: string): boolean {
+  const normalized = titleText.trim().toLowerCase();
+  return INDUSTRY_TITLE_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
+
 export function evaluateResultRow(
   row: ResultRowSnapshot,
   task: ResultReviewTask
@@ -132,16 +174,6 @@ export function evaluateResultRow(
     }
   }
 
-  let availableIso = "";
-  try {
-    availableIso = dateTextIso(row.availableText);
-  } catch {
-    hardReasons.push("available_unparseable");
-  }
-  if (availableIso && (compareIsoDates(availableIso, task.dateFrom) < 0 || compareIsoDates(availableIso, task.dateTo) > 0)) {
-    hardReasons.push("available_out_of_range");
-  }
-
   const norm = (s: string) => s.trim().toLowerCase();
   if (norm(row.contributorText) !== norm(task.contributor)) {
     hardReasons.push("contributor_mismatch");
@@ -161,6 +193,8 @@ export function evaluateResultRow(
   const hasAmbiguousTicker = isAmbiguousTicker(row.tickerText, row.tickerExtraCount);
   const strictTickerMatch = tickerMatches(row.tickerText, task.ticker) && row.tickerExtraCount === 0 && row.companyExtraCount === 0;
   const visibleTickerMatches = tickerMatches(row.tickerText, task.ticker) || targetTickerInTitle(row.titleText, task.ticker);
+  const companySpecificTitle = isTitleCompanySpecific(task.company, row.titleText);
+  const industryTitleMatch = titleMatchesIndustryPattern(row.titleText);
   if (!visibleTickerMatches) {
     reasons.push("ticker_mismatch");
   }
@@ -173,19 +207,34 @@ export function evaluateResultRow(
   if (hasAmbiguousTicker) {
     reasons.push("ambiguous_ticker");
   }
-  if (!isTitleCompanySpecific(task.company, row.titleText) && !targetTickerInTitle(row.titleText, task.ticker)) {
+  if (!companySpecificTitle && !targetTickerInTitle(row.titleText, task.ticker)) {
     reasons.push("title_not_company_specific");
+  }
+  if (industryTitleMatch) {
+    reasons.push("industry_title_match");
   }
 
   const reviewFlags = ["multi_company_row", "ambiguous_ticker", "title_not_company_specific"] as const;
   const needsHumanReview = reviewFlags.some((k) => reasons.includes(k));
   const downloadCategory = !eligible ? "none" : strictTickerMatch ? "ticker_matched" : "ticker_mismatch";
+  const scoreBreakdown = buildScoreBreakdown({
+    row,
+    task,
+    strictTickerMatch,
+    visibleTickerMatches,
+    companySpecificTitle,
+    industryTitleMatch
+  });
+  const scoreTotal = eligible ? Math.max(0, scoreBreakdown.tickerScore + scoreBreakdown.titleScore + scoreBreakdown.dateScore - scoreBreakdown.penalties) : 0;
+  const autoSelect = eligible;
 
   return {
     eligible,
     needsHumanReview,
-    autoSelect: downloadCategory !== "none",
+    autoSelect,
     downloadCategory,
+    scoreTotal,
+    scoreBreakdown,
     reasons: [...hardReasons, ...reasons]
   };
 }
@@ -195,7 +244,7 @@ export function reviewResultRows(rows: ResultRowSnapshot[], task: ResultReviewTa
   const selectedRowIndexes = new Set(
     reviews
       .filter((row) => row.review.autoSelect)
-      .sort((a, b) => compareAutoSelectPriority(a, b, task))
+      .sort((a, b) => compareAutoSelectPriority(a, b))
       .slice(0, MAX_AUTO_SELECT_ROWS)
       .map((row) => row.rowIndex)
   );
@@ -229,17 +278,26 @@ export function reviewResultRows(rows: ResultRowSnapshot[], task: ResultReviewTa
 
 function compareAutoSelectPriority(
   a: ResultRowsReview["reviews"][number],
-  b: ResultRowsReview["reviews"][number],
-  task: ResultReviewTask
+  b: ResultRowsReview["reviews"][number]
 ): number {
-  const distanceDelta = autoSelectDistance(a, task) - autoSelectDistance(b, task);
-  if (distanceDelta !== 0) {
-    return distanceDelta;
+  const scoreDelta = b.review.scoreTotal - a.review.scoreTotal;
+  if (scoreDelta !== 0) {
+    return scoreDelta;
   }
 
-  const categoryDelta = autoSelectCategoryRank(a.review.downloadCategory) - autoSelectCategoryRank(b.review.downloadCategory);
-  if (categoryDelta !== 0) {
-    return categoryDelta;
+  const dateScoreDelta = b.review.scoreBreakdown.dateScore - a.review.scoreBreakdown.dateScore;
+  if (dateScoreDelta !== 0) {
+    return dateScoreDelta;
+  }
+
+  const tickerScoreDelta = b.review.scoreBreakdown.tickerScore - a.review.scoreBreakdown.tickerScore;
+  if (tickerScoreDelta !== 0) {
+    return tickerScoreDelta;
+  }
+
+  const penaltyDelta = a.review.scoreBreakdown.penalties - b.review.scoreBreakdown.penalties;
+  if (penaltyDelta !== 0) {
+    return penaltyDelta;
   }
 
   const rowDateDelta = compareRowDates(a, b);
@@ -250,24 +308,91 @@ function compareAutoSelectPriority(
   return a.rowIndex - b.rowIndex;
 }
 
-function autoSelectDistance(row: ResultRowsReview["reviews"][number], task: ResultReviewTask): number {
-  if (!task.ccDate) {
-    return Number.POSITIVE_INFINITY;
-  }
-  try {
-    return Math.abs(differenceInDaysIso(dateTextIso(row.dateText), task.ccDate));
-  } catch {
-    return Number.POSITIVE_INFINITY;
-  }
-}
-
-function autoSelectCategoryRank(category: ResultRowReview["downloadCategory"]): number {
-  return category === "ticker_matched" ? 0 : category === "ticker_mismatch" ? 1 : 2;
-}
-
 function compareRowDates(a: ResultRowsReview["reviews"][number], b: ResultRowsReview["reviews"][number]): number {
   try {
     return compareIsoDates(dateTextIso(a.dateText), dateTextIso(b.dateText));
+  } catch {
+    return 0;
+  }
+}
+
+function buildScoreBreakdown(input: {
+  row: ResultRowSnapshot;
+  task: ResultReviewTask;
+  strictTickerMatch: boolean;
+  visibleTickerMatches: boolean;
+  companySpecificTitle: boolean;
+  industryTitleMatch: boolean;
+}): ResultRowReview["scoreBreakdown"] {
+  const { row, task, strictTickerMatch, visibleTickerMatches, companySpecificTitle, industryTitleMatch } = input;
+  const tickerInTitle = targetTickerInTitle(row.titleText, task.ticker);
+  const rowTickerMatches = tickerMatches(row.tickerText, task.ticker);
+
+  let tickerScore = 0;
+  if (strictTickerMatch) {
+    tickerScore = 40;
+  } else if (rowTickerMatches) {
+    tickerScore = 28;
+  } else if (tickerInTitle) {
+    tickerScore = 16;
+  }
+
+  let titleScore = 0;
+  if (companySpecificTitle) {
+    titleScore = industryTitleMatch ? 20 : 35;
+  } else if (visibleTickerMatches) {
+    titleScore = 10;
+  }
+
+  const dateScore = scoreDateDistance(row.dateText, task.ccDate);
+
+  let penalties = 0;
+  if (industryTitleMatch) {
+    penalties += 25;
+  }
+  if (row.companyExtraCount > 0) {
+    penalties += 10;
+  }
+  if (row.tickerExtraCount > 0 || isAmbiguousTicker(row.tickerText, row.tickerExtraCount)) {
+    penalties += 10;
+  }
+  if (!companySpecificTitle && !tickerInTitle) {
+    penalties += 15;
+  }
+
+  return {
+    tickerScore,
+    titleScore,
+    dateScore,
+    penalties,
+    industryPenaltyApplied: industryTitleMatch
+  };
+}
+
+function scoreDateDistance(dateText: string, ccDate?: string): number {
+  if (!ccDate) {
+    return 0;
+  }
+  try {
+    const dayDelta = differenceInDaysIso(dateTextIso(dateText), ccDate);
+    switch (dayDelta) {
+      case 1:
+        return 25;
+      case 2:
+        return 21;
+      case 3:
+        return 17;
+      case 4:
+        return 13;
+      case 5:
+        return 9;
+      case 6:
+        return 5;
+      case 7:
+        return 1;
+      default:
+        return 0;
+    }
   } catch {
     return 0;
   }
@@ -293,31 +418,43 @@ export async function extractVisibleResultRows(scope: AutomationScope): Promise<
         values.filter((value) => /^\d{1,3}$/.test(value.trim())).length;
       const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-      const collectRows = (
-        root: ShadowRoot
-      ): { rows: ResultRowSnapshot[]; rowCount: number } | null => {
+      const findHeaderIndex = (headers: string[], matcher: (header: string) => boolean) => headers.findIndex(matcher);
+
+      const collectGridColumns = (root: ShadowRoot) => {
         const headers = [...root.querySelectorAll(".tr-lg.title .grid-pane.columns .column")].map((el) =>
           clean(el).toLowerCase()
         );
         const columns = [...root.querySelectorAll(".tr-vlg.content .grid-pane.columns .column")];
         const indexes = {
-          date: headers.findIndex((header) => header === "date" || /^date\b/.test(header)),
-          available: headers.findIndex((header) => header.includes("available")),
-          company: headers.findIndex((header) => header.includes("company")),
-          ticker: headers.findIndex((header) => header.includes("ticker")),
-          title: headers.findIndex((header) => header.includes("title")),
-          pages: headers.findIndex((header) => header === "pages" || /^pages\b/.test(header)),
-          contributor: headers.findIndex((header) => header.includes("contributor"))
+          date: findHeaderIndex(headers, (header) => header === "date" || /^date\b/.test(header)),
+          available: findHeaderIndex(headers, (header) => header.includes("available")),
+          company: findHeaderIndex(headers, (header) => header.includes("company")),
+          ticker: findHeaderIndex(headers, (header) => header.includes("ticker")),
+          title: findHeaderIndex(headers, (header) => header.includes("title")),
+          pages: findHeaderIndex(headers, (header) => header === "pages" || /^pages?\b/.test(header)),
+          contributor: findHeaderIndex(
+            headers,
+            (header) => header.includes("contributor") || header.includes("broker") || header.includes("author")
+          )
         };
-        if (indexes.date < 0 || indexes.company < 0 || indexes.title < 0 || indexes.pages < 0 || indexes.contributor < 0) {
-          return null;
-        }
-
         const valuesByColumn = columns.map((column) =>
           [...column.children]
             .filter((child) => child.classList.contains("cell"))
             .map((cell) => clean(cell))
         );
+        return { headers, indexes, valuesByColumn };
+      };
+
+      const collectRows = (
+        root: ShadowRoot
+      ): { rows: ResultRowSnapshot[]; rowCount: number; indexes: ReturnType<typeof collectGridColumns>["indexes"] } | null => {
+        const { indexes: detectedIndexes, valuesByColumn } = collectGridColumns(root);
+        const indexes = {
+          ...detectedIndexes
+        };
+        if (indexes.date < 0 || indexes.company < 0 || indexes.title < 0) {
+          return null;
+        }
         const sampledRows = Math.min(30, Math.max(0, ...valuesByColumn.map((values) => values.length)));
         const pageHeaderIdx = indexes.pages;
         if (pageHeaderIdx >= 0) {
@@ -367,7 +504,43 @@ export async function extractVisibleResultRows(scope: AutomationScope): Promise<
             rows.push(row);
           }
         }
-        return { rows, rowCount };
+        return { rows, rowCount, indexes };
+      };
+
+      const collectSupplementalColumns = (
+        root: ShadowRoot
+      ): Partial<Record<"pagesText" | "contributorText", string[]>> => {
+        const { indexes, valuesByColumn } = collectGridColumns(root);
+        const out: Partial<Record<"pagesText" | "contributorText", string[]>> = {};
+
+        if (indexes.pages >= 0) {
+          const pageValues = valuesByColumn[indexes.pages] ?? [];
+          if (countNumericCells(pageValues.slice(0, 30)) > 0) {
+            out.pagesText = pageValues;
+          }
+        } else {
+          let bestIdx = -1;
+          let bestNumeric = 0;
+          for (let i = 0; i < valuesByColumn.length; i += 1) {
+            const numeric = countNumericCells((valuesByColumn[i] ?? []).slice(0, 30));
+            if (numeric > bestNumeric) {
+              bestNumeric = numeric;
+              bestIdx = i;
+            }
+          }
+          if (bestIdx >= 0 && bestNumeric > 0) {
+            out.pagesText = valuesByColumn[bestIdx] ?? [];
+          }
+        }
+
+        if (indexes.contributor >= 0) {
+          const contributorValues = valuesByColumn[indexes.contributor] ?? [];
+          if (contributorValues.some((value) => value.trim().length > 0)) {
+            out.contributorText = contributorValues;
+          }
+        }
+
+        return out;
       };
 
       const scrollHorizontally = (root: ShadowRoot, toRight: boolean) => {
@@ -396,20 +569,13 @@ export async function extractVisibleResultRows(scope: AutomationScope): Promise<
         if ((leftPages === 0 || leftContrib === 0) && left.rowCount > 0) {
           scrollHorizontally(root, true);
           await wait(120);
-          const right = collectRows(root);
-          if (right && right.rows.length > 0) {
-            const rightByIndex = new Map(right.rows.map((row) => [row.rowIndex, row]));
-            mergedRows = mergedRows.map((row) => {
-              const fallback = rightByIndex.get(row.rowIndex);
-              if (!fallback) {
-                return row;
-              }
-              return {
-                ...row,
-                pagesText: row.pagesText || fallback.pagesText,
-                contributorText: row.contributorText || fallback.contributorText
-              };
-            });
+          const right = collectSupplementalColumns(root);
+          if (right.pagesText || right.contributorText) {
+            mergedRows = mergedRows.map((row) => ({
+              ...row,
+              pagesText: row.pagesText || right.pagesText?.[row.rowIndex] || "",
+              contributorText: row.contributorText || right.contributorText?.[row.rowIndex] || ""
+            }));
           }
           scrollHorizontally(root, false);
           await wait(60);
