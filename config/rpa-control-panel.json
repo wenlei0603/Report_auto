@@ -2,6 +2,7 @@
   "defaultTaskFile": "lseg_request_by_call_2015_2018_end_plus_7d.txt",
   "downloadDir": "output/downloads",
   "dailyPageLimit": 700,
+  "maxDownloads": 0,
   "stopOnPageLimit": true,
   "baseConfigFile": "config/lseg.yaml",
   "nodeCommand": "node",
