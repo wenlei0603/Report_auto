@@ -1,0 +1,24 @@
+{
+  "defaultTaskFile": "lseg_request_by_call_2015_2018_end_plus_7d.txt",
+  "downloadDir": "output/downloads",
+  "dailyPageLimit": 700,
+  "stopOnPageLimit": true,
+  "baseConfigFile": "config/lseg.yaml",
+  "nodeCommand": "node",
+  "cliScript": "dist/src/cli.js",
+  "chromeLaunchScript": "scripts/start-chrome-cdp.ps1",
+  "ports": [
+    {
+      "id": "9222",
+      "port": 9222,
+      "profile": "D:/chrome-rpa-profile-T2677",
+      "defaultStartTask": "T0362"
+    },
+    {
+      "id": "9223",
+      "port": 9223,
+      "profile": "D:/chrome-rpa-profile-9223-newacct-20260606",
+      "defaultStartTask": "T0576"
+    }
+  ]
+}
