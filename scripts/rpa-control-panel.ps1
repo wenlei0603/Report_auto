@@ -1,6 +1,7 @@
 param(
   [string]$ConfigPath = "config/rpa-control-panel.json",
-  [switch]$ValidateOnly
+  [switch]$ValidateOnly,
+  [string]$StatusSmokeConfigPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,9 +95,14 @@ function Start-HiddenPowerShellCommand {
 function Invoke-NodeJson {
   param([string[]]$Arguments)
 
-  $output = & $Script:NodeCommand @Arguments 2>&1
-  $exitCode = $LASTEXITCODE
-  $text = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+  Push-Location $Script:Root
+  try {
+    $output = & $Script:NodeCommand @Arguments 2>&1
+    $exitCode = $LASTEXITCODE
+    $text = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+  } finally {
+    Pop-Location
+  }
 
   if ($exitCode -ne 0) {
     throw "Command failed: $Script:NodeCommand $($Arguments -join ' ')`r`n$text"
@@ -443,6 +449,17 @@ $Script:HelperScript = "scripts/rpa-control-helper.mjs"
 $Script:DefaultTaskFile = [string](Get-ConfigValue $Script:Config "defaultTaskFile" "lseg_request_by_call_2015_2018_end_plus_7d.txt")
 $Script:DefaultPageLimit = [int](Get-ConfigValue $Script:Config "dailyPageLimit" 700)
 $Script:DefaultStopOnPageLimit = Get-ConfigBool $Script:Config "stopOnPageLimit" $true
+
+if (-not [string]::IsNullOrWhiteSpace($StatusSmokeConfigPath)) {
+  $status = Invoke-NodeJson @(
+    $Script:HelperScript,
+    "status",
+    "--config-path",
+    $StatusSmokeConfigPath
+  )
+  Write-Output (Format-Status $status)
+  return
+}
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
