@@ -72,6 +72,25 @@ function Show-PanelError {
   [System.Windows.Forms.MessageBox]::Show($message, "RPA Control Panel", "OK", "Error") | Out-Null
 }
 
+function ConvertTo-PowerShellSingleQuotedLiteral {
+  param([Parameter(Mandatory = $true)][string]$Value)
+
+  return "'$($Value.Replace("'", "''"))'"
+}
+
+function Start-HiddenPowerShellCommand {
+  param([Parameter(Mandatory = $true)][string]$Command)
+
+  $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Command))
+  Start-Process -FilePath "powershell" -ArgumentList @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-EncodedCommand",
+    $encodedCommand
+  ) -WorkingDirectory $Script:Root -WindowStyle Hidden
+}
+
 function Invoke-NodeJson {
   param([string[]]$Arguments)
 
@@ -136,17 +155,8 @@ function Start-CdpBrowser {
     throw "Chrome launch script not found: $scriptPath"
   }
 
-  Start-Process -FilePath "powershell" -ArgumentList @(
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    $scriptPath,
-    "-Port",
-    $port,
-    "-UserDataDir",
-    $profile
-  ) -WorkingDirectory $Script:Root -WindowStyle Hidden
+  $command = "& $(ConvertTo-PowerShellSingleQuotedLiteral $scriptPath) -Port $(ConvertTo-PowerShellSingleQuotedLiteral $port) -UserDataDir $(ConvertTo-PowerShellSingleQuotedLiteral $profile)"
+  Start-HiddenPowerShellCommand $command
 
   Append-Log "Port $port browser open requested with profile $profile"
 }
