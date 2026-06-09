@@ -12,7 +12,8 @@ export async function openBrowserSession(config: LsegConfig, logger: RunLogger):
       browser = await chromium.connectOverCDP(config.cdp_endpoint);
       await logger.event("INFO", "Connected browser over CDP", { cdpEndpoint: config.cdp_endpoint });
     } catch (error) {
-      await logger.event("WARN", "CDP connect failed, launching fallback browser", { error: String(error) });
+      await logger.event("ERROR", "CDP connect failed", { cdpEndpoint: config.cdp_endpoint, error: String(error) });
+      throw new Error(`CDP connect failed for ${config.cdp_endpoint}: ${String(error)}`);
     }
   }
 
