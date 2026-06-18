@@ -1,8 +1,15 @@
 param(
   [string]$Port = "9222",
-  [string]$UserDataDir = "D:\chrome-rpa-profile",
+  [string]$UserDataDir = "",
   [string]$Url = "https://workspace.refinitiv.com/web/Apps/research-next/?st=OAPermID#/?st=OAPermID"
 )
+
+$Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+if ([string]::IsNullOrWhiteSpace($UserDataDir)) {
+  $UserDataDir = Join-Path $Root "profiles\chrome-rpa-$Port"
+} elseif (-not [System.IO.Path]::IsPathRooted($UserDataDir)) {
+  $UserDataDir = [System.IO.Path]::GetFullPath((Join-Path $Root $UserDataDir))
+}
 
 $versionUrl = "http://127.0.0.1:$Port/json/version"
 try {

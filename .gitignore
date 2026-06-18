@@ -5,6 +5,7 @@ playwright-report/
 test-results/
 .superpowers/
 .env
+profiles/
 everything-claude-code-ssh/
 Pastproject/
 logs/*.jsonl
@@ -18,8 +19,13 @@ logs_account2/*.csv
 logs_account2/*.txt
 logs_account2/*.log
 output/downloads/
+output/archive_repair/
+output/run_configs/
+output/task_slices/
 output_account2/downloads/
 output/debug/
 output/*.csv
+output/*.json
 output_account2/*.csv
 *.tsbuildinfo
+*.lnk

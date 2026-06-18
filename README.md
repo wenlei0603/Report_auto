@@ -53,7 +53,14 @@ Key fields:
 - `filters.contributor`: expected contributor, currently `Morgan Stanley`.
 - `filters.max_pages`: strict report page limit, currently `23`.
 
-The checked-in config contains local example paths. Adjust them for the target machine before running.
+The checked-in config avoids machine-specific absolute profile paths. Browser login profiles are created locally and ignored by git.
+
+The control-panel config in `config/rpa-control-panel.json` is intentionally portable:
+
+- Four worker ports are predeclared: `9222`, `9223`, `9224`, and `9225`.
+- Browser profiles are relative paths under `profiles/`, which is ignored by git so login state is never committed.
+- Add more ports by appending entries with `id`, `port`, `profile`, and `defaultStartTask`.
+- Keep `downloadDir` as `output/downloads` unless you also update the archive and queue commands.
 
 ## Common Commands
 
@@ -89,6 +96,41 @@ node dist/src/cli.js run --include-done --start-from-task T0001 --max-downloads 
 
 Use `--max-downloads 0` only when the run should not stop on successful-download count. Page-limit protection still applies.
 
+Build a portable unfinished-task queue from local completed folders:
+
+```powershell
+node dist/src/cli.js build-unfinished-queue --output queues/unfinished_20260618.tsv
+```
+
+The builder uses non-empty folders under `output/downloads/by_task/Txxxx` as the completion source of truth. It does not use logs to decide whether a task is done. The generated TSV has an explicit `task_id` column, so compact queues keep the original `Txxxx` identifiers on any computer.
+
+Run a generated queue:
+
+```powershell
+node dist/src/cli.js -c config/lseg.yaml run --tasks-file queues/unfinished_20260618.tsv --start-from-task T1201 --include-done
+```
+
+Use `--include-done` when resuming a compact queue from an explicit task id. The folder-based queue should already exclude successfully archived tasks.
+
+## Windows Control Panel
+
+The bundled control panel opens CDP browsers, generates per-port run configs, starts/stops node runners, and reads status.
+
+```powershell
+.\RPA-Control-Panel.bat
+```
+
+Typical workflow on a new computer:
+
+1. Install dependencies with `npm install` and build with `npm run build`.
+2. Open the control panel.
+3. Click `Open CDP` for each port you want to use, then log in manually.
+4. Set `Start task`, `Task file`, and `Pages`.
+5. Click `Inspect` once per port to confirm the browser is authenticated.
+6. Click `Start Run`.
+
+The panel writes generated queues and configs under ignored `output/task_slices` and `output/run_configs`. Downloads continue to land under `output/downloads/by_task`.
+
 ## Safe Run Procedure
 
 1. Make sure no other automation process is controlling the same CDP browser.
@@ -109,6 +151,8 @@ Current behavior:
 - If the sum fits the remaining budget, the task is logged as `download_started` and the page count is reserved.
 - If the sum would exceed `daily_page_limit`, the task is logged as `page_limit`, rows are not selected, download is not started, and the run stops.
 - Existing `download_started` and `downloaded` records are counted when computing the remaining budget.
+- Failures before `download_started` refund the in-memory page reservation.
+- Failures after `download_started` remain counted in daily usage even if archive verification later fails.
 
 ## Download And Browser Recovery
 

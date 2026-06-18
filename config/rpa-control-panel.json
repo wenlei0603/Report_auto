@@ -12,14 +12,26 @@
     {
       "id": "9222",
       "port": 9222,
-      "profile": "D:/chrome-rpa-profile-T2677",
-      "defaultStartTask": "T0362"
+      "profile": "profiles/chrome-rpa-9222",
+      "defaultStartTask": "T0002"
     },
     {
       "id": "9223",
       "port": 9223,
-      "profile": "D:/chrome-rpa-profile-9223-newacct-20260606",
-      "defaultStartTask": "T0576"
+      "profile": "profiles/chrome-rpa-9223",
+      "defaultStartTask": "T0002"
+    },
+    {
+      "id": "9224",
+      "port": 9224,
+      "profile": "profiles/chrome-rpa-9224",
+      "defaultStartTask": "T0002"
+    },
+    {
+      "id": "9225",
+      "port": 9225,
+      "profile": "profiles/chrome-rpa-9225",
+      "defaultStartTask": "T0002"
     }
   ]
 }

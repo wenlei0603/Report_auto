@@ -56,8 +56,6 @@ function makeRunConfig(args) {
 
   const completedFolders = scanCompletedTaskFolders(byTaskRoot);
   const selectedTasks = tasks.filter((task) => task.rowNumber >= fromTask.rowNumber && !completedFolders.nonEmpty.has(task.taskId));
-  const selectedIds = new Set(selectedTasks.map((task) => task.taskId));
-  const sparseLines = sourceLines.map((line, index) => (selectedIds.has(rowNumberToTaskId(index + 1)) ? line : ""));
 
   const runId = `gui_${todayLocal()}_p${worker.port}_from_${startTask}`;
   const queuePath = normalizeSlashes(path.join("output", "task_slices", `${runId}.txt`));
@@ -68,7 +66,7 @@ function makeRunConfig(args) {
   ensureParent(queuePath);
   ensureParent(auditPath);
   ensureParent(runConfigPath);
-  fs.writeFileSync(queuePath, `${sparseLines.join("\n")}\n`, "utf8");
+  fs.writeFileSync(queuePath, buildExplicitTaskTsv(selectedTasks), "utf8");
   fs.writeFileSync(auditPath, buildAuditCsv(selectedTasks, byTaskRoot), "utf8");
 
   const baseConfig = YAML.parse(fs.readFileSync(baseConfigPath, "utf8"));
@@ -242,8 +240,12 @@ function parseTaskRows(lines) {
     tasks.push({
       taskId: rowNumberToTaskId(rowNumber),
       rowNumber,
+      permno: parts[0] ?? "",
       company: parts[1] ?? "",
       ticker: parts[2] ?? "",
+      ccDate: parts[3] ?? "",
+      dateFrom: parts[4] ?? "",
+      dateTo: parts[5] ?? "",
       rawLine: line
     });
   }
@@ -285,6 +287,21 @@ function buildAuditCsv(tasks, byTaskRoot) {
     normalizeSlashes(path.join(byTaskRoot, task.taskId))
   ]);
   return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function buildExplicitTaskTsv(tasks) {
+  const header = ["task_id", "row_number", "permno", "company", "ticker", "cc_date", "date_from", "date_to"];
+  const rows = tasks.map((task) => [
+    task.taskId,
+    task.rowNumber,
+    task.permno,
+    task.company,
+    task.ticker,
+    task.ccDate,
+    task.dateFrom,
+    task.dateTo
+  ]);
+  return [header, ...rows].map((row) => row.map(tsvCell).join("\t")).join("\n") + "\n";
 }
 
 function latestRecordByTask(records) {
@@ -424,6 +441,10 @@ function parseBoolean(value, label) {
 function csvCell(value) {
   const text = String(value ?? "");
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function tsvCell(value) {
+  return String(value ?? "").replace(/[\t\r\n]+/g, " ").trim();
 }
 
 function ensureParent(filePath) {

@@ -13,7 +13,7 @@ browser:
   headless: false
   slow_mo_ms: 100
   fallback_channel: "chrome"
-  user_data_dir: "D:/chrome-rpa-profile"
+  user_data_dir: "profiles/chrome-rpa-default"
 
 filters:
   contributor: "Morgan Stanley"

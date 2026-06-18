@@ -13,10 +13,26 @@ export async function loadTasks(inputFile: string): Promise<RequestTask[]> {
 export function parseTasks(lines: Iterable<string>): RequestTask[] {
   const tasks: RequestTask[] = [];
   let rowNumber = 0;
+  let explicitHeader: Map<string, number> | null = null;
   for (const line of lines) {
     rowNumber += 1;
     const rawLine = line.trim();
     if (!rawLine || rawLine.startsWith("#")) {
+      continue;
+    }
+
+    const parts = splitTsv(rawLine);
+    const header = parseExplicitTaskHeader(parts);
+    if (header) {
+      explicitHeader = header;
+      continue;
+    }
+
+    if (explicitHeader) {
+      const explicitTask = parseExplicitTask(rawLine, rowNumber, explicitHeader);
+      if (explicitTask) {
+        tasks.push(explicitTask);
+      }
       continue;
     }
 
@@ -34,8 +50,88 @@ export function parseTasks(lines: Iterable<string>): RequestTask[] {
   return tasks;
 }
 
+function splitTsv(rawLine: string): string[] {
+  return rawLine.split("\t").map((part) => part.trim());
+}
+
+function parseExplicitTaskHeader(parts: string[]): Map<string, number> | null {
+  const normalized = parts.map(normalizeHeader);
+  if (!normalized.includes("task_id")) {
+    return null;
+  }
+  const header = new Map<string, number>();
+  for (const [index, name] of normalized.entries()) {
+    if (name) {
+      header.set(name, index);
+    }
+  }
+  return header;
+}
+
+function parseExplicitTask(rawLine: string, physicalRowNumber: number, header: Map<string, number>): RequestTask | null {
+  const parts = splitTsv(rawLine);
+  const taskId = normalizeTaskId(readField(parts, header, "task_id"));
+  if (!taskId) {
+    return null;
+  }
+
+  try {
+    const rowNumber = parseRowNumber(readField(parts, header, "row_number"), taskId) ?? physicalRowNumber;
+    const dateFrom = parseDateToIso(readAnyField(parts, header, ["date_from", "from_date", "from"]));
+    const dateTo = parseDateToIso(readAnyField(parts, header, ["date_to", "to_date", "to"]));
+    const ccDateRaw = readAnyField(parts, header, ["cc_date", "call_date"]);
+    const ccDate = ccDateRaw ? parseDateToIso(ccDateRaw) : dateFrom;
+    return {
+      taskId,
+      rowNumber,
+      permno: readField(parts, header, "permno"),
+      company: readAnyField(parts, header, ["company", "company_name"]) || `UNKNOWN_${rowNumber}`,
+      ticker: readField(parts, header, "ticker"),
+      ccDate,
+      dateFrom,
+      dateTo,
+      rawLine
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readAnyField(parts: string[], header: Map<string, number>, names: string[]): string {
+  for (const name of names) {
+    const value = readField(parts, header, name);
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function readField(parts: string[], header: Map<string, number>, name: string): string {
+  const index = header.get(name);
+  return index === undefined ? "" : (parts[index] ?? "").trim();
+}
+
+function normalizeHeader(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function normalizeTaskId(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  return /^T\d{4,}$/.test(normalized) ? normalized : "";
+}
+
+function parseRowNumber(value: string, taskId: string): number | null {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed;
+  }
+  const taskNumber = Number.parseInt(taskId.slice(1), 10);
+  return Number.isInteger(taskNumber) && taskNumber > 0 ? taskNumber : null;
+}
+
 function parseTsvTask(rawLine: string, rowNumber: number): RequestTask | null {
-  const parts = rawLine.split("\t").map((part) => part.trim());
+  const parts = splitTsv(rawLine);
   if (parts.length < 6) {
     return null;
   }

@@ -29,4 +29,21 @@ describe("task parser", () => {
       dateTo: "2015-01-08"
     });
   });
+
+  it("preserves task ids from explicit portable TSV queues", () => {
+    const tasks = parseTasks([
+      "task_id\trow_number\tpermno\tcompany\tticker\tcc_date\tdate_from\tdate_to",
+      "T3540\t3540\t12345\tSynchrony Financial\tSYF\t2016-01-01\t2016-01-01\t2016-01-15",
+      "T3544\t3544\t67890\tSyndax Pharmaceuticals Inc\tSNDX\t2016-02-01\t2016-02-01\t2016-02-15"
+    ]);
+
+    expect(tasks.map((task) => task.taskId)).toEqual(["T3540", "T3544"]);
+    expect(tasks[0]).toMatchObject({
+      rowNumber: 3540,
+      company: "Synchrony Financial",
+      ticker: "SYF",
+      dateFrom: "2016-01-01",
+      dateTo: "2016-01-15"
+    });
+  });
 });

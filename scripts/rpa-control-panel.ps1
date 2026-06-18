@@ -155,7 +155,7 @@ function Start-CdpBrowser {
   param([object]$Worker)
 
   $port = [string](Get-ConfigValue $Worker "port" (Get-ConfigValue $Worker "id" "9222"))
-  $profile = [string](Get-ConfigValue $Worker "profile" "D:/chrome-rpa-profile")
+  $profile = Resolve-RepoPath ([string](Get-ConfigValue $Worker "profile" "profiles/chrome-rpa-$port"))
   $scriptPath = Resolve-RepoPath $Script:ChromeLaunchScript
   if (-not (Test-Path $scriptPath)) {
     throw "Chrome launch script not found: $scriptPath"
