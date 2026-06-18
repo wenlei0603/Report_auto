@@ -88,6 +88,15 @@ describe("page estimation", () => {
 });
 
 describe("research scope readiness blockers", () => {
+  it("does not treat company names such as DocuSign Inc as login prompts", () => {
+    expect(
+      researchScopeBlocker(
+        "https://workspace.refinitiv.com/web/Apps/BatchSavePrint/?ws=true",
+        "2018-12-07-DOCU.OQ-DocuSign I-Morgan Stanley-DocuSign Inc 3Q19 Results"
+      )
+    ).toBeNull();
+  });
+
   it("recognizes expired or displaced login sessions before waiting for Research Next", () => {
     expect(researchScopeBlocker("https://example.com/oauth/login", "")).toMatchObject({ kind: "auth" });
     expect(researchScopeBlocker("https://workspace.refinitiv.com", "Session is expired. Sign in again")).toMatchObject({

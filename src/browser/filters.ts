@@ -1,6 +1,7 @@
 import type { LsegConfig } from "../config.js";
 import { formatPickerDate } from "../domain/dates.js";
 import type { RequestTask } from "../domain/types.js";
+import { hasAuthSessionText } from "./auth.js";
 import { clickFirst, firstVisible } from "./locators.js";
 import { owningPage } from "./scope.js";
 import type { AutomationScope, FilterResult, TaskFilterResult } from "./types.js";
@@ -222,7 +223,7 @@ export async function ensureQueryMode(scope: AutomationScope, config: LsegConfig
 
 async function throwIfAuthSessionText(scope: AutomationScope): Promise<void> {
   const text = await scope.evaluate(() => document.body?.innerText ?? "").catch(() => "");
-  if (/signed in to another device|session is expired|session expired|sign in|log in/i.test(text)) {
+  if (hasAuthSessionText(text)) {
     throw new Error("LSEG session is not authenticated: auth_text. Log in manually, then run again.");
   }
 }

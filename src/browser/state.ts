@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import type { LsegConfig } from "../config.js";
+import { hasAuthSessionText } from "./auth.js";
 import { anyVisible, countFirst } from "./locators.js";
 import { getResearchScope, owningPage, scopeUrl } from "./scope.js";
 import type { AppState, AutomationScope, ResultClassification, StateEvidence } from "./types.js";
@@ -127,7 +128,7 @@ function classifyText(text: string): AppState | null {
   if (/document information|save documents to pc|save to my pc/i.test(text)) {
     return "document_info";
   }
-  if (/sign in|signed in to another device|session expired|log in/i.test(text)) {
+  if (hasAuthSessionText(text)) {
     return "auth";
   }
   if (/loading|please wait/i.test(text)) {

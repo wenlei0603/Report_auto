@@ -41,6 +41,16 @@ interface PdfLandingResult {
   activeDownloads: number;
 }
 
+interface NativePdfCandidate {
+  path: string;
+  mtimeMs: number;
+}
+
+interface NativePdfCandidateMatch extends NativePdfCandidate {
+  rowIndex: number;
+  score: number;
+}
+
 export interface DownloadRowSelection {
   inspectableRows: number;
   requested: number;
@@ -212,7 +222,8 @@ async function detachOnBatchSavePrint(
         task.taskId,
         baseline,
         nativePdfWaitTimeoutMs(expectedPdfCount),
-        expectedPdfCount
+        expectedPdfCount,
+        rowSelection
       );
       if (!landed.complete) {
         return failed(
@@ -357,7 +368,8 @@ async function waitForLandedPdfs(
   taskId: string,
   baseline: PdfLandingBaseline,
   timeoutMs: number,
-  expectedPdfCount: number
+  expectedPdfCount: number,
+  rowSelection: DownloadRowSelection | undefined
 ): Promise<PdfLandingResult> {
   const expected = Math.max(1, expectedPdfCount);
   const deadline = Date.now() + timeoutMs;
@@ -365,8 +377,9 @@ async function waitForLandedPdfs(
   while (Date.now() < deadline) {
     const candidates = await listPdfCandidates(config, taskId);
     const fresh = candidates.filter((file) => !baseline.pdfMtimes.has(file.path) || file.mtimeMs > (baseline.pdfMtimes.get(file.path) ?? 0));
+    const matchingFresh = selectNativePdfCandidatesForRows(fresh, rowSelection, expected);
     const stable: string[] = [];
-    for (const file of fresh) {
+    for (const file of matchingFresh) {
       const before = await stat(file.path).catch(() => null);
       if (!before || before.size <= 0) {
         continue;
@@ -377,7 +390,11 @@ async function waitForLandedPdfs(
         stable.push(file.path);
       }
     }
-    const activeDownloads = await listActiveDownloadTempCandidates(config, taskId, baseline.capturedAtMs);
+    const activeDownloads = selectNativePdfCandidatesForRows(
+      await listActiveDownloadTempCandidates(config, taskId, baseline.capturedAtMs),
+      rowSelection,
+      expected
+    );
     latest = {
       complete: stable.length >= expected && activeDownloads.length === 0,
       paths: stable,
@@ -404,9 +421,160 @@ export function selectedRowPages(rowSelection: DownloadRowSelection | undefined)
   return (rowSelection?.selectedRows ?? []).reduce((sum, row) => sum + parsePageCount(row.pages), 0);
 }
 
+export function selectNativePdfCandidatesForRows(
+  candidates: NativePdfCandidate[],
+  rowSelection: DownloadRowSelection | undefined,
+  expectedPdfCount = expectedNativePdfCount(rowSelection)
+): NativePdfCandidate[] {
+  const expected = Math.max(1, expectedPdfCount);
+  const rows = rowSelection?.selectedRows ?? [];
+  if (rows.length === 0) {
+    return candidates.slice(0, expected);
+  }
+
+  const matches: NativePdfCandidateMatch[] = [];
+  rows.forEach((row, rowIndex) => {
+    for (const candidate of candidates) {
+      const score = nativePdfCandidateScore(candidate.path, row);
+      if (score > 0) {
+        matches.push({ ...candidate, rowIndex, score });
+      }
+    }
+  });
+
+  matches.sort((a, b) => b.score - a.score || b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path));
+  const usedRows = new Set<number>();
+  const usedPaths = new Set<string>();
+  const selected: NativePdfCandidate[] = [];
+  for (const match of matches) {
+    if (selected.length >= expected) {
+      break;
+    }
+    if (usedRows.has(match.rowIndex) || usedPaths.has(match.path)) {
+      continue;
+    }
+    usedRows.add(match.rowIndex);
+    usedPaths.add(match.path);
+    selected.push({ path: match.path, mtimeMs: match.mtimeMs });
+  }
+  return selected.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
 function parsePageCount(value: string): number {
   const match = String(value ?? "").match(/\b(\d+)\b/);
   return match ? Math.max(0, Number.parseInt(match[1] ?? "0", 10)) : 0;
+}
+
+const ARCHIVE_MATCH_STOP_WORDS = new Set([
+  "and",
+  "the",
+  "for",
+  "inc",
+  "corp",
+  "corporation",
+  "company",
+  "co",
+  "ltd",
+  "limited",
+  "holdings",
+  "holding",
+  "plc",
+  "llc",
+  "lp",
+  "sa",
+  "ag",
+  "nv",
+  "request",
+  "morgan",
+  "stanley"
+]);
+
+function nativePdfCandidateScore(candidatePath: string, row: DownloadRowSelectionItem): number {
+  const fileName = path.basename(candidatePath);
+  const lowerFileName = fileName.toLowerCase();
+  const rowDate = resultRowDateIso(row.date);
+  if (rowDate && !lowerFileName.includes(rowDate)) {
+    return 0;
+  }
+
+  const fileText = normalizeArchiveText(fileName);
+  const tickerScore = tickerAliases(row.ticker).some((alias) => fileText.includes(alias)) ? 45 : 0;
+  const titleOverlap = overlapCount(archiveTokens(row.title), fileText);
+  const companyOverlap = overlapCount(archiveTokens(row.company), fileText);
+  const titleScore = Math.min(45, titleOverlap * 9);
+  const companyScore = Math.min(30, companyOverlap * 10);
+  const contributorScore = archiveTokens(row.contributor).some((token) => fileText.includes(token)) ? 5 : 0;
+
+  const hasStrongTextMatch = tickerScore > 0 || titleOverlap >= 2 || companyOverlap >= 2;
+  if (!hasStrongTextMatch) {
+    return 0;
+  }
+  return 100 + tickerScore + titleScore + companyScore + contributorScore;
+}
+
+function resultRowDateIso(value: string): string {
+  const match = String(value ?? "").trim().match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (!match) {
+    return "";
+  }
+  const month = MONTH_INDEX[match[2]!.toLowerCase()];
+  if (!month) {
+    return "";
+  }
+  return `${match[3]}-${month}-${match[1]!.padStart(2, "0")}`;
+}
+
+const MONTH_INDEX: Record<string, string> = {
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12"
+};
+
+function archiveTokens(value: string): string[] {
+  return normalizeArchiveText(value)
+    .split(" ")
+    .filter((token) => token.length >= 3 && !/^\d+$/.test(token) && !ARCHIVE_MATCH_STOP_WORDS.has(token));
+}
+
+function overlapCount(tokens: string[], fileText: string): number {
+  return new Set(tokens.filter((token) => fileText.includes(token))).size;
+}
+
+function tickerAliases(value: string): string[] {
+  const normalized = normalizeArchiveText(value);
+  if (!normalized || normalized === "n a") {
+    return [];
+  }
+  const parts = normalized.split(" ").filter(Boolean);
+  const aliases = new Set<string>();
+  if (parts[0] && parts[0].length >= 2) {
+    aliases.add(parts[0]);
+  }
+  const compact = parts.join("");
+  if (compact.length >= 2) {
+    aliases.add(compact);
+  }
+  return [...aliases];
+}
+
+function normalizeArchiveText(value: string): string {
+  return String(value ?? "")
+    .replace(/(^|[\s:;])request(?=[A-Z0-9])/g, "$1")
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/&/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function isActiveDownloadTempFileName(fileName: string): boolean {

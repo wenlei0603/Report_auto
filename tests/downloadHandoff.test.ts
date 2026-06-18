@@ -5,6 +5,7 @@ import {
   isBatchSavePrintAppUrl,
   isPdfLandingHandoff,
   nativePdfWaitTimeoutMs,
+  selectNativePdfCandidatesForRows,
   selectedRowPages,
   shouldWaitBeforeReconnect
 } from "../src/browser/download.js";
@@ -50,5 +51,69 @@ describe("download handoff timing", () => {
         selectedRows: [{ pages: "14" }, { pages: "8 pgs" }, { pages: "N/A" }]
       } as never)
     ).toBe(22);
+  });
+
+  it("keeps only fresh native PDFs that match the selected result row", () => {
+    const selected = selectNativePdfCandidatesForRows(
+      [
+        {
+          path: "C:/Users/wl187/Downloads/2016-05-06-SSNC.OQ-Morgan Stanley-SSC Technologies Holdings, Inc. Looking Forward To Second ...-74415118.pdf",
+          mtimeMs: 200
+        },
+        {
+          path: "C:/Users/wl187/Downloads/2016-08-09-NUAN.OQ^C22-Morgan Stanley-Nuance Communications Inc. 3Q16 Results Revenue Growth Timeline Pushed Out...-75449742.pdf",
+          mtimeMs: 100
+        }
+      ],
+      {
+        selected: 1,
+        requested: 1,
+        selectedRows: [
+          {
+            rowIndex: 0,
+            date: "09-Aug-2016",
+            company: "Nuance Communications Inc",
+            ticker: "NUAN.OQ^C22",
+            title: "RequestNuance Communications Inc.: 3Q16 Results: Revenue Growth Timeline Pushed Out by Shift to Subscription",
+            pages: "14",
+            contributor: "Morgan Stanley"
+          }
+        ]
+      } as never,
+      1
+    );
+
+    expect(selected.map((file) => file.path)).toEqual([
+      "C:/Users/wl187/Downloads/2016-08-09-NUAN.OQ^C22-Morgan Stanley-Nuance Communications Inc. 3Q16 Results Revenue Growth Timeline Pushed Out...-75449742.pdf"
+    ]);
+  });
+
+  it("matches native PDFs whose platform filenames truncate the selected row title", () => {
+    const selected = selectNativePdfCandidatesForRows(
+      [
+        {
+          path: "C:/Users/wl187/Downloads/2016-05-06-SSNC.OQ-Morgan Stanley-SSC Technologies Holdings, Inc. Looking Forward To Second ...-74415118.pdf",
+          mtimeMs: 100
+        }
+      ],
+      {
+        selected: 1,
+        requested: 1,
+        selectedRows: [
+          {
+            rowIndex: 0,
+            date: "06-May-2016",
+            company: "SS&C Technologies Holdings Inc",
+            ticker: "SSNC.OQ",
+            title: "RequestSS&C Technologies Holdings, Inc.: Looking Forward To Second Half Growth",
+            pages: "10",
+            contributor: "Morgan Stanley"
+          }
+        ]
+      } as never,
+      1
+    );
+
+    expect(selected).toHaveLength(1);
   });
 });

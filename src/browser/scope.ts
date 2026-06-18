@@ -1,6 +1,7 @@
 import type { Frame, Page } from "playwright";
 import type { LsegConfig } from "../config.js";
 import type { RunLogger } from "../io/runLogger.js";
+import { hasAuthSessionText } from "./auth.js";
 import type { AutomationScope } from "./types.js";
 
 export function owningPage(scope: AutomationScope): Page {
@@ -59,7 +60,7 @@ export function researchScopeBlocker(url: string, bodyText: string): { kind: "au
   if (/login|signin|auth|saml|oauth/i.test(url)) {
     return { kind: "auth", reason: "auth_url" };
   }
-  if (/signed in to another device|session is expired|session expired|sign in|log in/i.test(bodyText)) {
+  if (hasAuthSessionText(bodyText)) {
     return { kind: "auth", reason: "auth_text" };
   }
   return null;
